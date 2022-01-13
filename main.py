@@ -7,9 +7,12 @@
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
 import csv
 import math
+from queue import Empty
 import sys
 import tkinter as tk
 import tkinter as ttk
+import tkinter.ttk as TTK
+from tkinter.ttk import *
 import tkinter.font as tkFont
 from tkinter import RAISED, messagebox
 from datetime import datetime
@@ -356,15 +359,72 @@ class App:
 
 
     def m_serial(self):
-        print("serial")
+        
+        self.comboP=None
+
+        def selectser():
+            #effettuiamo il salvataggio su un file
+            porttest=self.comboP.get()
+            
+            if porttest=="Scegli un valore": #se non è stato selezionato alcun vaore appare un messaggio di errore.
+                messagebox.showinfo("Impossibile salvare la preferenza:"," Selezionare una porta valida")
+            else :
+                #porttest=porttest[0:4]
+                psel=porttest.split(" ") #poichè potrebbe non essere COM3 ma avere più digit divido la stringa secondo gli spazi e prendo e dalla lista creata prendo il primo elemento che rappresenta il nominativo della porta
+
+                port=psel[0] 
+                print(port)
+                serial_w.destroy()
+
+
+          
+
+            
+
+
         port = list(sr_list.comports())
         for p in port:
             print(p)
-
+            
+    
         serial_w = ttk.Toplevel(root)
-        serial_w.geometry("400x400")
+
+        
+        width = 400
+        height = 200
+        screenwidth = serial_w.winfo_screenwidth()
+        screenheight = serial_w.winfo_screenheight()
+        alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width) / 2, (screenheight - height) / 2)
+        serial_w.geometry(alignstr)
+        serial_w.resizable(width=False, height=False)
         serial_w.resizable(width=False, height=False)
         serial_w.title("Serial Option")
+        serial_w.iconbitmap("icona.ico")
+
+        self.label1 = ttk.Label(serial_w, text="Scegli la porta di comunicazione:")
+        ft = tkFont.Font(family='Roboto', size=10)
+        self.label1["font"] = ft
+        self.label1.place(x=40, y=25 )
+        
+        # dichiaro la combo box per selezionare la porta seriale 
+        self.comboP=TTK.Combobox(serial_w, values=port, state="readonly")
+        self.comboP.set("Scegli un valore")
+        
+        self.comboP.place(x=40, y=50, width=280, height=35) #x=60
+
+        self.saveser_b=ttk.Button(serial_w)
+        self.saveser_b.place(x=160, y=120, width=70, height=35)
+
+        self.saveser_b["bg"] = "#00ac69"
+        ft = tkFont.Font(family='Roboto', size=12)
+        self.saveser_b["font"] = ft
+        self.saveser_b["fg"] = "#ffffff"
+        self.saveser_b["justify"] = "center"
+        self.saveser_b["text"] = 'SAVE'
+        self.saveser_b["borderwidth"] = 0
+        self.saveser_b["command"] = selectser
+
+
 
 
     def animate(self,k):
