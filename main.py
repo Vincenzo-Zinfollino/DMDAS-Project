@@ -342,7 +342,7 @@ class App:
         
         obsv=10
 
-        if len(temp)>0 and len(temp)<10:
+        if len(temp)>1 and len(temp)<10:
             self.avg=np.average(temp)
             self.std=np.std(temp)
         elif len(temp)>obsv:  # Calcolo della media nella obsv. window pari a 10 samples
@@ -366,15 +366,20 @@ class App:
             #effettuiamo il salvataggio su un file
             porttest=self.comboP.get()
             
-            if porttest=="Scegli un valore": #se non è stato selezionato alcun vaore appare un messaggio di errore.
-                messagebox.showinfo("Impossibile salvare la preferenza:"," Selezionare una porta valida")
-            else :
-                #porttest=porttest[0:4]
-                psel=porttest.split(" ") #poichè potrebbe non essere COM3 ma avere più digit divido la stringa secondo gli spazi e prendo e dalla lista creata prendo il primo elemento che rappresenta il nominativo della porta
+            if not self.is_running:
+                if porttest=="Scegli un valore": #se non è stato selezionato alcun vaore appare un messaggio di errore.
+                    messagebox.showinfo("Impossibile salvare la preferenza:"," Selezionare una porta valida")
+                else :
+                    #porttest=porttest[0:4]
+                    psel=porttest.split(" ") 
+                    # poichè potrebbe non essere COM3 ma avere più digit divido la stringa 
+                    # secondo gli spazi e prendo e dalla lista creata prendo il primo elemento che rappresenta il nominativo della porta
 
-                port=psel[0] 
-                print(port)
-                serial_w.destroy()
+                    port=psel[0] 
+                    print(port)
+                    serial_w.destroy()
+            else:
+                messagebox.showinfo("Impossibile modificare la porta:"," Il processo di misurazione è in corso")
 
 
           
