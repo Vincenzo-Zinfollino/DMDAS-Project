@@ -6,13 +6,9 @@
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
 import csv
-import math
-from queue import Empty
 import sys
 import tkinter as tk
 import tkinter as ttk
-import tkinter.ttk as TTK
-from tkinter.ttk import *
 import tkinter.font as tkFont
 from tkinter import RAISED, messagebox
 from datetime import datetime
@@ -106,8 +102,7 @@ class App:
         self.is_running = False
         self.measT = None  # Prima era commentato
         self.filepath =''
-        self.avg= None
-        self.std= None
+
 
         # setting title
         root.title("Progetto DMDAS")
@@ -192,12 +187,6 @@ class App:
 
         #left side -------------
 
-        self.l1 = tk.Label(root, text='La temperatura corrente è:')
-        self.l1.place(x=110, y=60, width=270, height=20)
-        ft = tkFont.Font(family='Roboto', size=10)
-        self.l1["font"] = ft
-        self.l1["fg"] = "#000000"
-
         self.temp_label = tk.Label(root, text='--')
         self.temp_label.place(x=110, y=85, width=270, height=100)
         ft = tkFont.Font(family='Roboto', size=32)
@@ -205,40 +194,12 @@ class App:
         self.temp_label["fg"] = "#ffffff"
         self.temp_label["bg"] = "#696969"
 
-        self.lavg = tk.Label(root, text='AVG:')
-        self.lavg.place(x=113, y=200, width=130, height=20)
-        ft = tkFont.Font(family='Roboto Bold', size=10)
-        self.lavg["font"] = ft
-        self.lavg["fg"] = "#000000"
 
-        self.avg_label = tk.Label(root, text='--')
-        self.avg_label.place(x=110, y=225, width=130, height=45)
-        ft = tkFont.Font(family='Roboto', size=22)
-        self.avg_label["font"] = ft
-        self.avg_label["fg"] = "#ffffff"
-        self.avg_label["bg"] = "#696969"
-
-        
-        self.lstd = tk.Label(root, text='STD:')
-        self.lstd.place(x=251, y=200, width=130, height=20)
-        ft = tkFont.Font(family='Roboto Bold', size=10)
-        self.lstd["font"] = ft
-        self.lstd["fg"] = "#000000"
-
-        self.std_label = tk.Label(root, text='--')
-        self.std_label.place(x=250, y=225, width=130, height=45)
-        ft = tkFont.Font(family='Roboto', size=22)
-        self.std_label["font"] = ft
-        self.std_label["fg"] = "#ffffff"
-        self.std_label["bg"] = "#696969"
-
-
-
-
-
-
-
-
+        self.l1 = tk.Label(root, text='La temperatura corrente è:')
+        self.l1.place(x=110, y=60, width=270, height=20)
+        ft = tkFont.Font(family='Roboto', size=10)
+        self.l1["font"] = ft
+        self.l1["fg"] = "#000000"
 
         #END left side ------
 
@@ -338,98 +299,19 @@ class App:
         self.save_b["command"] = save
 
 
-    def stat(self): #calcolo e aggiorno le label di STD e AVG
-        
-        obsv=10
-
-        if len(temp)>1 and len(temp)<10:
-            self.avg=np.average(temp)
-            self.std=np.std(temp)
-        elif len(temp)>obsv:  # Calcolo della media nella obsv. window pari a 10 samples
-            self.avg=np.average(temp[-(obsv+1):-1])
-            self.std=np.std(temp[-(obsv+1):-1])
-        
-        
-        if self.avg is not None and self.std is not None:
-            self.avg_label.config(text=round(self.avg, 2))
-            self.std_label.config(text=round(self.std, 2))
-
-
 
 
 
     def m_serial(self):
-        
-        self.comboP=None
-
-        def selectser():
-            #effettuiamo il salvataggio su un file
-            porttest=self.comboP.get()
-            
-            if not self.is_running:
-                if porttest=="Scegli un valore": #se non è stato selezionato alcun vaore appare un messaggio di errore.
-                    messagebox.showinfo("Impossibile salvare la preferenza:"," Selezionare una porta valida")
-                else :
-                    #porttest=porttest[0:4]
-                    psel=porttest.split(" ") 
-                    # poichè potrebbe non essere COM3 ma avere più digit divido la stringa 
-                    # secondo gli spazi e prendo e dalla lista creata prendo il primo elemento che rappresenta il nominativo della porta
-
-                    port=psel[0] 
-                    print(port)
-                    serial_w.destroy()
-            else:
-                messagebox.showinfo("Impossibile modificare la porta:"," Il processo di misurazione è in corso")
-
-
-          
-
-            
-
-
+        print("serial")
         port = list(sr_list.comports())
         for p in port:
             print(p)
-            
-    
-        serial_w = ttk.Toplevel(root)
 
-        
-        width = 400
-        height = 200
-        screenwidth = serial_w.winfo_screenwidth()
-        screenheight = serial_w.winfo_screenheight()
-        alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width) / 2, (screenheight - height) / 2)
-        serial_w.geometry(alignstr)
-        serial_w.resizable(width=False, height=False)
+        serial_w = ttk.Toplevel(root)
+        serial_w.geometry("400x400")
         serial_w.resizable(width=False, height=False)
         serial_w.title("Serial Option")
-        serial_w.iconbitmap("icona.ico")
-
-        self.label1 = ttk.Label(serial_w, text="Scegli la porta di comunicazione:")
-        ft = tkFont.Font(family='Roboto', size=10)
-        self.label1["font"] = ft
-        self.label1.place(x=40, y=25 )
-        
-        # dichiaro la combo box per selezionare la porta seriale 
-        self.comboP=TTK.Combobox(serial_w, values=port, state="readonly")
-        self.comboP.set("Scegli un valore")
-        
-        self.comboP.place(x=40, y=50, width=280, height=35) #x=60
-
-        self.saveser_b=ttk.Button(serial_w)
-        self.saveser_b.place(x=160, y=120, width=70, height=35)
-
-        self.saveser_b["bg"] = "#00ac69"
-        ft = tkFont.Font(family='Roboto', size=12)
-        self.saveser_b["font"] = ft
-        self.saveser_b["fg"] = "#ffffff"
-        self.saveser_b["justify"] = "center"
-        self.saveser_b["text"] = 'SAVE'
-        self.saveser_b["borderwidth"] = 0
-        self.saveser_b["command"] = selectser
-
-
 
 
     def animate(self,k):
@@ -443,7 +325,6 @@ class App:
                 #self.temp_label.place(x=10, y=60, width=140, height=50)
                 print("tempdisp =", str(temp[-1]))
 
-            self.stat()
 
             a.autoscale(enable=True, axis='both', tight=None)
             a.clear()
