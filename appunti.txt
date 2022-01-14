@@ -1,0 +1,35 @@
+void readRegister()
+{
+    SPI.beginTransaction(SPISettings(500000, MSBFIRST, SPI_MODE1));
+    digitalWrite(chipSelectPin, LOW); // * Chip Select CS: a LOW quando c'è comunicazione (attiva il clock), altrimenti HIGH
+
+    SPI.transfer(0x80); //80h = 128 - config register // *-> questa è l'istruzione che indica che configuriamo il registro
+    SPI.transfer(0xB0); //B0h = 176 - 10110000// *: |Bias ON|Conversion normally off|1 shot|3 wire|Fault|Fault|Fault Status clear|60Hz| vedi pagina 13
+    digitalWrite(chipSelectPin, HIGH);
+
+    digitalWrite(chipSelectPin, LOW);
+    SPI.transfer(1);           // !! CHIEDI AL PROF QUESTA COSA (LEGGI PAGINA 13)
+    reg1 = SPI.transfer(0xFF); // !! leggi MSB
+    reg2 = SPI.transfer(0xFF); // !! leggi LSB
+    digitalWrite(chipSelectPin, HIGH);
+
+    // * dato che i registri sono a 8 bit e che il numero è un intero a 16 bit, l'unico modo per memorizzare l'intero dato
+    // * è dividerlo in 2 registri, quando i registri sono letti bisogna concatenarli
+    fullreg = reg1;       //read MSB // * prende la prima parte del numero a 16 bit
+    fullreg <<= 8;        //Shift to the MSB part // * lo sposta all'inizio del numero (per lasciare spazio a LSB)
+    fullreg |= reg2;      //read LSB and combine it with MSB // * concatena MSB con LSB
+    fullreg >>= 1;        //Shift D0 out. // !! L'adc è a 15 bit, quindi uno dei bit è in realtà inutilizzato
+    resistance = fullreg; //pass the value to the resistance variable
+    //note: this is not yet the resistance of the RTD!
+
+    digitalWrite(chipSelectPin, LOW);
+
+    SPI.transfer(0x80);                //80h = 128 // * di nuovo la configurazione
+    SPI.transfer(144);                 //144 = 10010000 // * |Bias on|Conversion auto|not 1 shot|3 wire|Fault|Fault|Fault Status clear|60Hz| vedi pagina 13
+    SPI.endTransaction();              // * fine
+    digitalWrite(chipSelectPin, HIGH); //* stoppa il SCLK
+
+    //* roba di lettura
+    Serial.print("Resistance: ");
+    Serial.println(resistance);
+}
