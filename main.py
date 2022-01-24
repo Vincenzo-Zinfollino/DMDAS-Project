@@ -389,8 +389,8 @@ class App:
             
 
 
-        port = list(sr_list.comports())
-        for p in port:
+        portlist = list(sr_list.comports())
+        for p in portlist:
             print(p)
             
     
@@ -414,7 +414,7 @@ class App:
         self.label1.place(x=40, y=25 )
         
         # dichiaro la combo box per selezionare la porta seriale 
-        self.comboP=TTK.Combobox(serial_w, values=port, state="readonly")
+        self.comboP=TTK.Combobox(serial_w, values=portlist, state="readonly")
         self.comboP.set("Scegli un valore")
         
         self.comboP.place(x=40, y=50, width=280, height=35) #x=60
@@ -449,6 +449,10 @@ class App:
 
             a.autoscale(enable=True, axis='both', tight=None)
             a.clear()
+
+            a.set_xlabel('Time [s]')
+            a.set_ylabel('Temperature [°C]')
+
             a.plot( i_time,temp)
             if len(temp)>0:
               yticks(np.arange(min(temp), max(temp), step=0.31))
