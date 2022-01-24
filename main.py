@@ -46,6 +46,8 @@ i_time = []
 
 f = Figure(figsize=(7.5, 5), dpi=100)
 a = f.add_subplot(111)
+a.set_xlabel('Time [s]')
+a.set_ylabel('Temperature [°C]')
 
 
 class measure(threading.Thread):
