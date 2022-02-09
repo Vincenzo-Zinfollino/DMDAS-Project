@@ -5,6 +5,7 @@
 
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
+from asyncore import read
 import csv
 import math
 from queue import Empty
@@ -20,6 +21,7 @@ from tkinter.filedialog import askopenfilename
 
 import matplotlib.pyplot as plt
 import serial as sr
+import io
 import serial.tools.list_ports as sr_list
 import time
 import threading
@@ -37,7 +39,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 from matplotlib.figure import Figure
 
 
-settings= {"COMPORT":"COM3","RNOMINAL":100,"BAUDRATE":115200,"REFRESISTOR":430}
+settings= {"COMPORT":"COM6","RNOMINAL":100,"BAUDRATE":115200,"REFRESISTOR":430,"STEP":1,"WINDOWSIZE":100}
 
 downstream = []
 temp = []
@@ -66,7 +68,7 @@ class measure(threading.Thread):
         self.baudrate = baudrate
         self.running = False
         self.s_data = sr.Serial(self.port, self.baudrate, timeout=0)
-
+        
 
     def rtd_to_temp(self,rtd):
        
@@ -100,36 +102,40 @@ class measure(threading.Thread):
 
         while self.running and self.s_data.isOpen():
 
-            reading = str(self.s_data.readline())
-            if reading==old_read:continue
+            #reading = str(self.s_data.readline()) #modificato
+            reading = self.s_data.readline()
 
-            old_read=reading
-
-            #print("reading ",reading)
-
-            reading = reading[2:len(reading) - 5] 
-
-            downstream.append(reading)
-          
-
-            rtd = reading.split(':')[-1]
            
 
-            if not rtd == '' and  rtd.isdecimal() and 'Fault' not in rtd: #NOt is decimal poiche il punto non è parte di un numero 
-                
-                print("RTD",rtd)
-                rtd=int(rtd)
-                var = self.rtd_to_temp(rtd)
-                
+            '''if reading==old_read:continue
+
+            old_read=reading'''
+
+           
+            #print (reading.hex())
+            
+
+            read=reading.hex()
+
+            val = []
+
+            for i in range(0,len(read),4):
+                print(i)
+                val.append(int(read[i:i+4],16))
                 
 
-                temp.append(round(var,2)) #modificato
-                self.instant = self.instant + delay
-                i_time.append(float(self.instant))
-                print("temp =", temp)
-            print("down =", downstream)
 
-            print("run")
+
+            for rtd in val:
+                if rtd > 0:
+                    t=round(self.rtd_to_temp(rtd),2)
+
+                    print(t)
+                    temp.append(t)
+                    self.instant = self.instant + settings["STEP"]
+                    i_time.append(float(self.instant))
+
+
 
             # print(i_time)
             #print(temp)
@@ -307,7 +313,8 @@ class App:
     def stop_command(self):
         print("stop")
         # self.start["state"] = "normal"
-        # self.data1.stop()
+        #self.data1.stop()
+        self.measT.s_data.close()
         self.is_running = self.measT.stop()
         ani.pause()
         plt.close()
@@ -386,19 +393,17 @@ class App:
         
         obsv=10
 
-        if len(temp)>1 and len(temp)<10:
+        if len(temp)>1 and len(temp)<settings["WINDOWSIZE"]:
             self.avg=np.average(temp)
             self.std=np.std(temp)
-        elif len(temp)>obsv:  # Calcolo della media nella obsv. window pari a 10 samples
-            self.avg=np.average(temp[-(obsv+1):-1])
-            self.std=np.std(temp[-(obsv+1):-1])
+        elif len(temp)>=settings["WINDOWSIZE"]:  # Calcolo della media nella obsv. window pari a 10 samples
+            self.avg=np.average(temp[-(settings["WINDOWSIZE"]+1):-1])
+            self.std=np.std(temp[-(settings["WINDOWSIZE"]+1):-1])
         
         
         if self.avg is not None and self.std is not None:
             self.avg_label.config(text=round(self.avg, 2))
             self.std_label.config(text=round(self.std, 2))
-
-
 
 
 

@@ -1,39 +1,26 @@
-  /*************************************************** 
-  This is a library for the Adafruit PT100/P1000 RTD Sensor w/MAX31865
 
-  Designed specifically to work with the Adafruit RTD Sensor
-  ----> https://www.adafruit.com/products/3328
+  #include <Adafruit_MAX31865.h>
+  #include <SPI.h>
+  #include "CircularBuffer.h"
+  
+  // Use software SPI: CS, DI, DO, CLK
+  Adafruit_MAX31865 thermo = Adafruit_MAX31865( 10, 11, 12, 13);
+  // use hardware SPI, just pass in the CS pin
+  //Adafruit_MAX31865 thermo = Adafruit_MAX31865(10);
+  
+  // The value of the Rref resistor. Use 430.0 for PT100 and 4300.0 for PT1000
+  #define RREF      430.0
+  // The 'nominal' 0-degrees-C resistance of the sensor
+  // 100.0 for PT100, 1000.0 for PT1000
+  #define RNOMINAL  100.0
+   int ind=0;
+   const byte drdyPin=2;
+   const byte chipSelectPin=10;
 
-  This sensor uses SPI to communicate, 4 pins are required to  
-  interface
-  Adafruit invests time and resources providing this open source code, 
-  please support Adafruit and open-source hardware by purchasing 
-  products from Adafruit!
-
-  Written by Limor Fried/Ladyada for Adafruit Industries.  
-  BSD license, all text above must be included in any redistribution
- ****************************************************/
-
-#include <Adafruit_MAX31865.h>
-#include <SPI.h>
-
-// Use software SPI: CS, DI, DO, CLK
-Adafruit_MAX31865 thermo = Adafruit_MAX31865( 10, 11, 12, 13);
-// use hardware SPI, just pass in the CS pin
-//Adafruit_MAX31865 thermo = Adafruit_MAX31865(10);
-
-// The value of the Rref resistor. Use 430.0 for PT100 and 4300.0 for PT1000
-#define RREF      430.0
-// The 'nominal' 0-degrees-C resistance of the sensor
-// 100.0 for PT100, 1000.0 for PT1000
-#define RNOMINAL  100.0
- int ind=0;
- const byte drdyPin=2;
- const byte chipSelectPin=10;
-
- 
- byte reg1,reg2;
- uint16_t fullreg;
+  CircularBuffer cb= CircularBuffer(5);
+  
+  byte reg1,reg2;
+  uint16_t fullreg;
 
 
 
@@ -57,8 +44,6 @@ void setup() {
    setCounterStartValue(1);  
    setupTimer();
   
-   
- 
 
 }
 
@@ -73,8 +58,9 @@ void loop() {
    //readRegister();
     //uint16_t mamt=0xC2F7;
     //Serial.print(*(&mamt));
-    
- // delay(1000);
+     
+    sendData();
+
   }
 
 void IntReady(){
@@ -97,23 +83,25 @@ void setupTimer(){
 
 
 
-
-    ISR(TIMER1_OVF_vect) {  
+  // interrupt contatore/timer metodo
+  ISR(TIMER1_OVF_vect) {  
       
       interrupts();
       
       TCNT1H = h;  
       TCNT1L = l;
-      //uint16_t rtd = thermo.readRTD();
-      //uint16_t rtd=readRegister();
-       //Serial.println (rtd);
+     
       if (drdy){
         drdy=false;
-        Serial.print (index);
-        Serial.print (":");
+        //Serial.print (index);
+        //Serial.println ();
+       
        //uint16_t rtd = thermo.readRTD();
        uint16_t rtd=readRegister();
-       Serial.println (rtd);
+        //Serial.println (rtd);
+        cb.push(rtd);
+        
+        
        //Serial.println();
        index++;
       }
@@ -178,3 +166,33 @@ uint16_t  readRegister()
    
    return fullreg;
 }
+
+
+ void sendData(){
+
+   
+    if (!cb.available())  return;
+      uint16_t succ=0;
+     uint8_t msb,lsb=0;
+
+     
+       int sz=cb.size();
+      uint16_t *pointer=cb.dump();
+          
+      for(int i=0;i<sz;i++){
+
+        succ=*(pointer+i);
+        
+        //Serial.write(succ);
+        
+        msb=succ>>8;
+        lsb=succ&0xFF;
+        
+        Serial.write(msb);
+        Serial.write(lsb);
+        
+       
+      }
+    
+  
+ }
