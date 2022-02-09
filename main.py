@@ -36,8 +36,9 @@ matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 
-port = "COM3"
-baudrate = 115200
+
+settings= {"COMPORT":"COM3","RNOMINAL":100,"BAUDRATE":115200,"REFRESISTOR":430}
+
 downstream = []
 temp = []
 delay=1
@@ -60,10 +61,31 @@ class measure(threading.Thread):
         self.instant =0
         #i_time.append(0)
         self._stop_event = threading.Event()
-        self.port = port
+        self.port = port   
+        print ("COM port init", self.port)
         self.baudrate = baudrate
         self.running = False
-        self.s_data = sr.Serial(port, baudrate, timeout=0)
+        self.s_data = sr.Serial(self.port, self.baudrate, timeout=0)
+
+
+    def rtd_to_temp(self,rtd):
+       
+        A = 3.9083e-3
+        B = -5.775e-7
+        Rt= ((rtd/32768)*settings["REFRESISTOR"])
+
+        temp=(math.sqrt(((A*A)-(4*B))  +  ((4*B)/settings["RNOMINAL"])*Rt ) -A)/(2*B)
+        if (temp>= 0):return temp
+
+        Rt= (Rt/settings["RNOMINAL"])*100
+
+        temp=-242.02 + 2.2228*Rt 
+        + 2.5859e-3*(math.pow(Rt,2)) 
+        - 4.8260e-6*(math.pow(Rt,3))
+        - 2.8183e-8*(math.pow(Rt,4))
+        + 1.5243e-10*(math.pow(Rt,5))
+
+        return temp
 
     def run(self):
 
@@ -71,28 +93,47 @@ class measure(threading.Thread):
         try:
             self.s_data.isOpen()
         except IOError:
-            self.s_data = sr.Serial(port, baudrate, timeout=0)
+            self.s_data = sr.Serial(self.port, self.baudrate, timeout=0)
 
         self.running = True
+        old_read=""
+
         while self.running and self.s_data.isOpen():
+
             reading = str(self.s_data.readline())
+            if reading==old_read:continue
 
-            reading = reading[2:len(reading) - 5]
+            old_read=reading
+
+            #print("reading ",reading)
+
+            reading = reading[2:len(reading) - 5] 
+
             downstream.append(reading)
+          
 
-            var = reading.split(':')[-1]
-            if not var == '' and not var.isdecimal() and 'Fault' not in var:
-                temp.append(float(var))
+            rtd = reading.split(':')[-1]
+           
+
+            if not rtd == '' and  rtd.isdecimal() and 'Fault' not in rtd: #NOt is decimal poiche il punto non è parte di un numero 
+                
+                print("RTD",rtd)
+                rtd=int(rtd)
+                var = self.rtd_to_temp(rtd)
+                
+                
+
+                temp.append(round(var,2)) #modificato
                 self.instant = self.instant + delay
                 i_time.append(float(self.instant))
                 print("temp =", temp)
-            # print("down =", downstream)
+            print("down =", downstream)
 
             print("run")
 
             # print(i_time)
             #print(temp)
-            time.sleep(delay+1)
+            #time.sleep(delay+1)
 
     def stop(self):
         self.running = False
@@ -251,7 +292,8 @@ class App:
         self.start["state"] = "disable"
 
         # dichiarazione thread
-        self.measT = measure(port, baudrate)
+        print("start port :",settings["COMPORT"])  #modificato
+        self.measT = measure(settings["COMPORT"], settings["BAUDRATE"])
         self.measT.setDaemon(True)  # SetDiavoletto
         self.is_running = True
 
@@ -377,8 +419,8 @@ class App:
                     # poichè potrebbe non essere COM3 ma avere più digit divido la stringa 
                     # secondo gli spazi e prendo e dalla lista creata prendo il primo elemento che rappresenta il nominativo della porta
 
-                    port=psel[0] 
-                    print(port)
+                    settings["COMPORT"]=psel[0] #modificato
+                    print(settings["COMPORT"])
                     serial_w.destroy()
             else:
                 messagebox.showinfo("Impossibile modificare la porta:"," Il processo di misurazione è in corso")
@@ -463,5 +505,5 @@ class App:
 if __name__ == "__main__":
     root = tk.Tk()
     app = App(root)
-    ani = an.FuncAnimation(f, app.animate,  interval=30, repeat=False)
+    ani = an.FuncAnimation(f, app.animate,  interval=10, repeat=False)
     root.mainloop()
