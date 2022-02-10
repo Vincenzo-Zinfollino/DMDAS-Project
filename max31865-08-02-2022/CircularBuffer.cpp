@@ -1,4 +1,5 @@
-#include <iostream>
+//#include <iostream>
+#include "Arduino.h"
 #include "CircularBuffer.h"
 using namespace std;
 
@@ -67,7 +68,7 @@ uint16_t *CircularBuffer::dump()
     return toReturn;
 }
 //!! JUST FOR DEBUGGING PURPOSES
-void CircularBuffer::show()
+/*void CircularBuffer::show()
 {
     for (int i = 0; i < _length; i++)
     {
@@ -75,6 +76,6 @@ void CircularBuffer::show()
     }
     cout << endl
          << "Head:\t" << _head << "; Tail:\t" << _tail << endl;
-}
+}*/
 //&a = prendi l'indirizzo di a
 //*a = a conterrà un indirizzo

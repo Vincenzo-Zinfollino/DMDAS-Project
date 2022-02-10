@@ -4,6 +4,11 @@
   #include "CircularBuffer.h"
   
   // Use software SPI: CS, DI, DO, CLK
+  //CS => CS //Arduino 10
+  //MISO => SDO //Arduino 12
+  //MOSI => SDI //Arduino 11
+  //SCK => SCK //Arduino 13
+  
   Adafruit_MAX31865 thermo = Adafruit_MAX31865( 10, 11, 12, 13);
   // use hardware SPI, just pass in the CS pin
   //Adafruit_MAX31865 thermo = Adafruit_MAX31865(10);
@@ -28,7 +33,7 @@
  byte l=0xF7;
  
  bool drdy=false;
- int index=0;
+ 
        
 void setup() {
   
@@ -48,38 +53,32 @@ void setup() {
 }
 
 
-void loop() {
-   
-   //uint16_t rtd = thermo.readRTD();
 
-   //Serial.print ("il valore della libreria RTD :");
-   //Serial.println (rtd);
-   //Serial.println();
-   //readRegister();
-    //uint16_t mamt=0xC2F7;
-    //Serial.print(*(&mamt));
-     
+
+  void loop() {
+ 
     sendData();
 
   }
 
-void IntReady(){
-  drdy=true;
-}
+    void IntReady(){
+      drdy=true;
+    }
 
-void setupTimer(){
-  
-  TIMSK1 &= ~(1<<TOIE1);  //disabilita l'interrupt del contatore 1
-  TCCR1A &= ~((1<<WGM11) | (1<<WGM10));  // imposta la modalità del timer come contatore (funzione Normale )
-  TCCR1B &= ~((1<<WGM12) | (1<<WGM13));  // imposta la modalità del timer come contatore (funzione Normale )
-  TIMSK1 &= ~(1<<OCIE1A);  // abilita l'interrupt del contatore (solo se l'interrupt flag globale (I_flag) è settato a true )
-  TCCR1B |= (1<<CS12)  | (1<<CS10); // set dei bit del prescaler a 1 0 1  CS12=1 CS10=1 
-  TCCR1B &= ~(1<<CS11);             // set dei bit del prescaler a 1 0 1  CS11=0
-  TCNT1H = h;  // set up parte alta del registro del punto di partenza del contatore
-  TCNT1L = l; // set up parte bassa del registro del punto di partenza del contatore
-  TIMSK1 |= (1<<TOIE1);  // riabilita l'interrupt del contatore 1
     
-}
+    void setupTimer(){
+      
+      TIMSK1 &= ~(1<<TOIE1);  //disabilita l'interrupt del contatore 1
+      TCCR1A &= ~((1<<WGM11) | (1<<WGM10));  // imposta la modalità del timer come contatore (funzione Normale )
+      TCCR1B &= ~((1<<WGM12) | (1<<WGM13));  // imposta la modalità del timer come contatore (funzione Normale )
+      TIMSK1 &= ~(1<<OCIE1A);  // abilita l'interrupt del contatore (solo se l'interrupt flag globale (I_flag) è settato a true )
+      TCCR1B |= (1<<CS12)  | (1<<CS10); // set dei bit del prescaler a 1 0 1  CS12=1 CS10=1 
+      TCCR1B &= ~(1<<CS11);             // set dei bit del prescaler a 1 0 1  CS11=0
+      TCNT1H = h;  // set up parte alta del registro del punto di partenza del contatore
+      TCNT1L = l; // set up parte bassa del registro del punto di partenza del contatore
+      TIMSK1 |= (1<<TOIE1);  // riabilita l'interrupt del contatore 1
+        
+    }
 
 
 
@@ -92,26 +91,19 @@ void setupTimer(){
       TCNT1L = l;
      
       if (drdy){
-        drdy=false;
-        //Serial.print (index);
-        //Serial.println ();
-       
-       //uint16_t rtd = thermo.readRTD();
-       uint16_t rtd=readRegister();
-        //Serial.println (rtd);
-        cb.push(rtd);
-        
-        
-       //Serial.println();
-       index++;
+      drdy=false;
+      uint16_t rtd=readRegister();
+      //Serial.println (rtd);
+      cb.push(rtd);
+      
       }
     
     } 
 
 
- //timeperiod è da considerarsi in secondi ricordati che il valore massimo possibile è 4 secondi 
+      //timeperiod è da considerarsi in secondi ricordati che il valore massimo possibile è 4 secondi 
  
-  void setCounterStartValue(unsigned int timePeriod){ 
+      void setCounterStartValue(unsigned int timePeriod){ 
 
       int n=(timePeriod*15625);
      
@@ -171,28 +163,29 @@ uint16_t  readRegister()
  void sendData(){
 
    
-    if (!cb.available())  return;
-      uint16_t succ=0;
-     uint8_t msb,lsb=0;
+        if (!cb.available())  return; // se il buffer è vuoto esce dal metodo
+        uint16_t dat=0;
+        uint8_t msb,lsb=0;
 
      
-       int sz=cb.size();
-      uint16_t *pointer=cb.dump();
+        int sz=cb.size(); // restituisce il numero di elementi presenti nel buffer
+        uint16_t *pointer=cb.dump(); //ritorna il puntatore dei dati da inviare, cioè del primo elemento del buffer 
           
-      for(int i=0;i<sz;i++){
+        for(int i=0;i<sz;i++){ // per ogni elemento da trasmettere accede ai due byte che compongono il valore di RTD 
 
-        succ=*(pointer+i);
-        
-        //Serial.write(succ);
-        
-        msb=succ>>8;
-        lsb=succ&0xFF;
-        
-        Serial.write(msb);
+        dat=*(pointer+i); //prende il valore di RTD (a 16 bit) 
+
+        msb=dat>>8;     // insertisce in MSB la parte più significativa del valore di RTD 
+        lsb=dat&0xFF;    // insertisce in LSB la parte meno significativa del valore di RTD 
+
+        // poichè il metodo write invia un byte per volta è necessario suddividere il dato in due Byte
+        Serial.write(msb); 
         Serial.write(lsb);
-        
-       
+
       }
     
   
  }
+
+
+// WRYYY
