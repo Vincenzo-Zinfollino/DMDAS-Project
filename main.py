@@ -10,6 +10,7 @@ from base64 import encode
 import csv
 import math
 from multiprocessing.sharedctypes import Value
+from pickle import NONE
 from queue import Empty
 import sys
 import tkinter as tk
@@ -53,6 +54,7 @@ settings= {"COMPORT":"COM7",
             "TIMER":0.5,
             "NOTCH":60,
             "ERROR":5,
+            "TARGETTEMP":None
             }
 
 fault = { "80":"MAX31865_FAULT_HIGHTHRESH: 0x80",
@@ -60,11 +62,10 @@ fault = { "80":"MAX31865_FAULT_HIGHTHRESH: 0x80",
           "20":"MAX31865_FAULT_REFINLOW 0x20",  
           "10":"MAX31865_FAULT_REFINHIGH 0x10",
           "08":"MAX31865_FAULT_RTDINLOW 0x08",
-          "04":"MAX31865_FAULT_OVUV 0x04",
-          
+          "04":"MAX31865_FAULT_OVUV 0x04",         
+        }
 
-}
-
+t_time=[]
 downstream = []
 temp = []
 delay=1
@@ -182,7 +183,7 @@ class measure(threading.Thread):
             
 
            
-            print (reading.hex())
+            #print (reading.hex())
             
 
             read=reading.hex()
@@ -193,27 +194,45 @@ class measure(threading.Thread):
                 val.append(int(read[i:i+4],16))
                 
 
-            print(val)
+            #print(val)
 
             for rtd in val:
 
-                print (rtd)
+                #print (rtd)
                 t=round(self.rtd_to_temp(rtd),2)
 
                 if rtd > 0  :
                     
                     if len(temp)>0:
-                     dif=abs(t-temp[-1])
+                        dif=abs(t-temp[-1])
+
+                     #verifichiamo il target
+
+                    settings["TARGETTEMP"]=25
+
                     
                     count_err=0
-                    print(t)
+                    #print(t)
                     temp.append(t)
                     self.instant = self.instant + settings["TIMER"]
                     i_time.append(float(self.instant))
 
-                    if len(temp)>1 and (dif>40): #rileva gli sbalzi di temperatura
+                    if len(temp)>1:
+                        print("WRYY outside")
+                        print(temp[-1]<settings["TARGETTEMP"])
+
+                        if (settings["TARGETTEMP"] is not None) and (t>=settings["TARGETTEMP"]) and (temp[-2]<settings["TARGETTEMP"]):
+                            t_time.append([self.instant])
+                            print("WRYY inside")
+                        elif settings["TARGETTEMP"] is not None and t<settings["TARGETTEMP"] and temp[-2]>=settings["TARGETTEMP"]:
+                            t_time[-1]+=[self.instant,self.instant-t_time[-1][0]]
+                    elif settings["TARGETTEMP"] is not None and t>=settings["TARGETTEMP"]:
+                         t_time.append([self.instant])
+
+                    print (t_time)
                         
 
+                    if len(temp)>1 and (dif>40): #rileva gli sbalzi di temperatura
 
                         # TO Do: inserire il log
                         errors[0].append(temp[-1])
@@ -299,7 +318,7 @@ class App:
         root.geometry(alignstr)
         root.resizable(width=False, height=False)
         root.option_add('Roboto', '12')
-        root.iconbitmap("icona.ico")
+        #root.iconbitmap("Icona.ico")
 
 
         # menu
@@ -510,7 +529,7 @@ class App:
         saveData_w.geometry(alignstr)
         saveData_w.resizable(width=False, height=False)
         saveData_w.title("File Option")
-        saveData_w.iconbitmap("icona.ico")
+        #saveData_w.iconbitmap("Icona.ico")
         # --- END  Window Declaring
 
 
@@ -602,7 +621,7 @@ class App:
         serial_w.resizable(width=False, height=False)
         serial_w.resizable(width=False, height=False)
         serial_w.title("Serial Option")
-        serial_w.iconbitmap("icona.ico")
+        #serial_w.iconbitmap("Icona.ico")
 
         self.label1 = ttk.Label(serial_w, text="Scegli la porta di comunicazione:")
         ft = tkFont.Font(family='Roboto', size=10)
@@ -653,7 +672,7 @@ class App:
         settingsw.geometry(alignstr)
         settingsw.resizable(width=False, height=False)
         settingsw.title("Settings Option")
-        settingsw.iconbitmap("icona.ico")
+        #settingsw.iconbitmap("Icona.ico")
 
         self.label1 = ttk.Label(settingsw, text="Scegli l'intervallo di tempo tra due campioni:")
         ft = tkFont.Font(family='Roboto', size=10)
@@ -724,8 +743,13 @@ class App:
             a.set_xlabel('Time [s]')
             a.set_ylabel('Temperature [°C]')
 
-            
-            a.plot( i_time,temp,errors[1],errors[0], "rx")
+          
+
+            if len(temp)>0:
+                a.plot( i_time,temp,errors[1],errors[0], "rx")
+                if(settings["TARGETTEMP"]):
+                    a.plot([0,i_time[-1]],[settings["TARGETTEMP"],settings["TARGETTEMP"]],"r-") 
+
             if len(temp)>0:
               yticks(np.arange(min(temp), max(temp), step=0.31))
 
