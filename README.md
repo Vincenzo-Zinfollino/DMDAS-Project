@@ -9,11 +9,11 @@ Il file _max31865.ino_ contiene lo script utilizzato per la richiesta dei dati d
 
 ## CircularBuffer.cpp
 
-Il file _CircularBuffer.cpp_ contiene l'implementazione della classe **CircularBuffer**: un buffer circolare usato per memorizzare i dati delle misure prima della trasmissione. Esso ha una lunghezza _length, un contatore \_count per indicare il numero di elementi inseriti e due indici: \_head che indica l'elemento inserito più di recente e \_tail che indica l'elemento inserito meno recentemente.
+Il file _CircularBuffer.cpp_ contiene l'implementazione della classe **CircularBuffer**: un buffer circolare usato per memorizzare i dati delle misure prima della trasmissione. Esso ha una lunghezza \_length, un contatore \_count per indicare il numero di elementi inseriti e due indici: \_head che indica l'elemento inserito più di recente e \_tail che indica l'elemento inserito meno recentemente.
 ![images/push.png](/images/push.png)
-Il metodo \_push(element)_ permette di inserire all'interno del buffer circolare un elemento, l'elemento sarà inserito in "testa" alla struttura dati, il cui puntatore si sposterà (in modo circolre) in avanti per indicare l'elemento inserito più di recente. Se il puntatore _head coincide con \_tail quando il numero di elementi inseriti \_count è maggiore di 1, vuol dire che i dati che saranno inseriti successivamente sovrascriveranno quelli più vecchi: è perciò necessario spostare in avanti \_tail.
+Il metodo _push(element)_ permette di inserire all'interno del buffer circolare un elemento, l'elemento sarà inserito in "testa" alla struttura dati, il cui puntatore si sposterà (in modo circolre) in avanti per indicare l'elemento inserito più di recente. Se il puntatore \_head coincide con \_tail quando il numero di elementi inseriti \_count è maggiore di 1, vuol dire che i dati che saranno inseriti successivamente sovrascriveranno quelli più vecchi: è perciò necessario spostare in avanti \_tail.
 ![images/pop.png](/images/pop.png)
-Il metodo \_pop()_ permette di leggere e rimuovere l'elemento meno recente dal buffer circolare: l'implementazione prevede solo memorizzare il valore meno recente e di spostare \_tail in avanti di una posizione.
+Il metodo _pop()_ permette di leggere e rimuovere l'elemento meno recente dal buffer circolare: l'implementazione prevede solo memorizzare il valore meno recente e di spostare \_tail in avanti di una posizione.
 ![images/dump.png](/images/dump.png)
 Il metodo _dump()_ permette di raccogliere fino a 64kB di dati dal buffer, così che possano essere trasmessi sulla porta seriale in seguito ad una richiesta da parte del calcolatore.
 
