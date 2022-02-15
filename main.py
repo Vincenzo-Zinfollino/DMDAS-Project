@@ -6,8 +6,10 @@
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
 from asyncore import read
+from base64 import encode
 import csv
 import math
+from multiprocessing.sharedctypes import Value
 from queue import Empty
 import sys
 import tkinter as tk
@@ -15,13 +17,16 @@ import tkinter as ttk
 import tkinter.ttk as TTK
 from tkinter.ttk import *
 import tkinter.font as tkFont
-from tkinter import RAISED, messagebox
+from tkinter import RAISED, Tk, messagebox
 from datetime import datetime
 from tkinter.filedialog import askopenfilename
+import unicodedata
+from unittest import skip
+import logging 
 
 import matplotlib.pyplot as plt
 import serial as sr
-import io
+import io 
 import serial.tools.list_ports as sr_list
 import time
 import threading
@@ -30,7 +35,7 @@ import numpy as np
 import matplotlib
 import matplotlib.animation as an
 #from matplotlib import animation as an
-from matplotlib.pyplot import yticks
+from matplotlib.pyplot import text, yticks
 
 
 
@@ -39,13 +44,32 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 from matplotlib.figure import Figure
 
 
-settings= {"COMPORT":"COM6","RNOMINAL":100,"BAUDRATE":115200,"REFRESISTOR":430,"STEP":1,"WINDOWSIZE":100}
+settings= {"COMPORT":"COM7",
+            "RNOMINAL":100,
+            "BAUDRATE":115200,
+            "REFRESISTOR":430,
+            "STEP":0,
+            "WINDOWSIZE":100,
+            "TIMER":0.5,
+            "NOTCH":60,
+            "ERROR":5,
+            }
+
+fault = { "80":"MAX31865_FAULT_HIGHTHRESH: 0x80",
+          "40":"MAX31865_FAULT_LOWTHRESH 0x40",
+          "20":"MAX31865_FAULT_REFINLOW 0x20",  
+          "10":"MAX31865_FAULT_REFINHIGH 0x10",
+          "08":"MAX31865_FAULT_RTDINLOW 0x08",
+          "04":"MAX31865_FAULT_OVUV 0x04",
+          
+
+}
 
 downstream = []
 temp = []
 delay=1
 i_time = []
-
+errors=[[],[]]
 
 f = Figure(figsize=(7.5, 5), dpi=100)
 a = f.add_subplot(111)
@@ -67,10 +91,11 @@ class measure(threading.Thread):
         print ("COM port init", self.port)
         self.baudrate = baudrate
         self.running = False
-        self.s_data = sr.Serial(self.port, self.baudrate, timeout=0)
+        #self.s_data = sr.Serial(self.port, self.baudrate, timeout=0)
+        self.s_data = sr.Serial( baudrate=self.baudrate) #modificato
         
 
-    def rtd_to_temp(self,rtd):
+    def rtd_to_temp(self,rtd:int):
        
         A = 3.9083e-3
         B = -5.775e-7
@@ -89,63 +114,168 @@ class measure(threading.Thread):
 
         return temp
 
+    def fault_aq(self):
+
+        if self.s_data.isOpen():
+
+            self.s_data.flush()
+
+            
+            self.s_data.write(bytes("F\n","ascii"))
+            self.s_data.flush()
+
+            read= ""
+            
+            while not (read == "00"):
+                try:
+                    reading = self.s_data.read(1)
+                    read=reading.hex()
+
+                    if read!="00":
+                       logging.error(fault[read])
+                    
+                   # inseriamo i fault 
+                except: return
+
+
+   
+
     def run(self):
+      
 
-        # print( self.s_data.isOpen())
-        try:
-            self.s_data.isOpen()
-        except IOError:
-            self.s_data = sr.Serial(self.port, self.baudrate, timeout=0)
+        
+        self.s_data.port=self.port
+        count_err=0
 
-        self.running = True
-        old_read=""
+        try :
+            self.s_data.open()
+        except:  
+            app.start["state"] = "normal" 
 
-        while self.running and self.s_data.isOpen():
+            return 
 
-            #reading = str(self.s_data.readline()) #modificato
-            reading = self.s_data.readline()
+        
+        
+        if self.s_data.isOpen():
 
+            self.running = True
+             
+            #self.s_data.write(b"\n") 
+            self.s_data.flush()
+            #time.sleep(0.5)
+            self.s_data.readline() 
+            
+
+            self.s_data.write(bytes(f"S:{settings['TIMER']}:{settings['NOTCH']}\n","ascii"))
+            self.s_data.flush()
+
+       
+
+        while self.running and self.s_data is not None and self.s_data.isOpen():
+
+            try:
+               
+                reading = self.s_data.read(2)
+            except: break
            
 
-            '''if reading==old_read:continue
-
-            old_read=reading'''
+            
 
            
-            #print (reading.hex())
+            print (reading.hex())
             
 
             read=reading.hex()
 
             val = []
-
+            
             for i in range(0,len(read),4):
-                print(i)
                 val.append(int(read[i:i+4],16))
                 
 
-
+            print(val)
 
             for rtd in val:
-                if rtd > 0:
-                    t=round(self.rtd_to_temp(rtd),2)
 
+                print (rtd)
+                t=round(self.rtd_to_temp(rtd),2)
+
+                if rtd > 0  :
+                    
+                    if len(temp)>0:
+                     dif=abs(t-temp[-1])
+                    
+                    count_err=0
                     print(t)
                     temp.append(t)
-                    self.instant = self.instant + settings["STEP"]
+                    self.instant = self.instant + settings["TIMER"]
                     i_time.append(float(self.instant))
+
+                    if len(temp)>1 and (dif>40): #rileva gli sbalzi di temperatura
+                        
+
+
+                        # TO Do: inserire il log
+                        errors[0].append(temp[-1])
+                        errors[1].append(self.instant)
+                        #effettuiamo il logging
+
+                        logging.warning(f"Salto di temperatura di :{round(dif,2)}° all istante {self.instant}")
+
+                    
+
+                else:
+
+                    count_err+=1
+
+                   
+                    self.fault_aq()
+                   
+
+                    if len(temp)>0:
+                        temp.append(temp[-1])
+                        self.instant = self.instant + settings["TIMER"]
+                        i_time.append(float(self.instant))
+
+                        errors[0].append(temp[-1])
+                        errors[1].append(self.instant)
+
+
+
+                       
+                    if  count_err==settings["ERROR"]:
+                        
+                        if  self.running:
+                            if (messagebox.askokcancel("ERRORE","Sono stati rilevati un numero elevato di errori.\nLe misure potrebbero non essere attendibili.\nVuoi terminare ?")):
+                                app.stop_command()
+                                self.stop()
+                            else:return
 
 
 
             # print(i_time)
             #print(temp)
-            #time.sleep(delay+1)
+            #time.sleep(settings["STEP"])
+        
+
+
+    
+
+
+
 
     def stop(self):
+         
+
+        if (self.s_data.isOpen()):
+
+            self.s_data.write(b"T\n")
+            self.s_data.close()
+
         self.running = False
         return self.running
         # self._stop_event.set()
-        # self.s_data.close()
+      
 
 
 class App:
@@ -186,6 +316,7 @@ class App:
         # ---------File Open---------
         self.menu_o = tk.Menu(self.menubar, tearoff=0)
         self.menu_o.add_cascade(label="Serial", command=self.m_serial)
+        self.menu_o.add_cascade(label="Settings", command=self.m_settings)
         # ---------End File Open---------
 
         # ---------Main Top Menu Element---------
@@ -292,6 +423,8 @@ class App:
         #END left side ------
 
 
+
+
     def start_command(self):
         print("Start")
 
@@ -301,12 +434,13 @@ class App:
         print("start port :",settings["COMPORT"])  #modificato
         self.measT = measure(settings["COMPORT"], settings["BAUDRATE"])
         self.measT.setDaemon(True)  # SetDiavoletto
-        self.is_running = True
-
+       
+        
 
 
         if not self.measT.is_alive():
             self.measT.start()
+            self.is_running = True
 
         # print(downstream)
 
@@ -314,12 +448,27 @@ class App:
         print("stop")
         # self.start["state"] = "normal"
         #self.data1.stop()
-        self.measT.s_data.close()
         self.is_running = self.measT.stop()
         ani.pause()
         plt.close()
 
         # print("btnstp",self.data1.is_alive())
+
+
+
+    def on_closing(self):
+
+      
+        if  self.is_running:
+            if (messagebox.askokcancel("Esci","Le misure sono ancora in corso.\nSei Sicuro di voler terminare ?")):
+                self.stop_command()
+                root.destroy()
+            else: return
+
+        
+        root.destroy()
+        
+
 
     def m_open(self):
         print("open")
@@ -431,7 +580,7 @@ class App:
                 messagebox.showinfo("Impossibile modificare la porta:"," Il processo di misurazione è in corso")
 
 
-          
+ 
 
             
 
@@ -478,6 +627,81 @@ class App:
         self.saveser_b["borderwidth"] = 0
         self.saveser_b["command"] = selectser
 
+    def m_settings(self):
+
+
+        def selectset():
+            if not self.is_running:
+                var=self.t_Slider.get()
+                settings["TIMER"]=var
+
+                settings["NOTCH"]=self.comboN.get()[0:2]
+                settingsw.destroy()
+            else:
+                messagebox.showinfo("Impossibile modificare le impostazioni:"," Il processo di misurazione è in corso")
+
+            
+
+        
+        #da inserire la condizione per impossibilitare la modifica durante la misurazione 
+        settingsw = ttk.Toplevel(root)
+        width = 320
+        height = 325
+        screenwidth = settingsw.winfo_screenwidth()
+        screenheight = settingsw.winfo_screenheight()
+        alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width) / 2, (screenheight - height) / 2)
+        settingsw.geometry(alignstr)
+        settingsw.resizable(width=False, height=False)
+        settingsw.title("Settings Option")
+        settingsw.iconbitmap("icona.ico")
+
+        self.label1 = ttk.Label(settingsw, text="Scegli l'intervallo di tempo tra due campioni:")
+        ft = tkFont.Font(family='Roboto', size=10)
+        self.label1["font"] = ft
+        self.label1.place(x=40, y=30 )
+      
+        # dichiaro lo slider della temperatura 
+        ft = tkFont.Font(family='Roboto', size=8)
+        self.t_Slider = tk.Scale(settingsw, from_=0.1, to=4.0,digits=2, resolution=0.1, orient="horizontal",font=ft)
+        self.t_Slider.set(1.0)
+        self.t_Slider.place(x=40, y=50, width=200)
+
+
+        self.label2 = ttk.Label(settingsw, text="Scegli la frequenza del Notch :")
+        ft = tkFont.Font(family='Roboto', size=10)
+        self.label2["font"] = ft
+        self.label2.place(x=40, y=105 )
+      
+
+        #selezione del notch
+        notch=["50 Hz","60 Hz"]
+        self.comboN=TTK.Combobox(settingsw, values=notch, state="readonly")
+        self.comboN.set("Scegli un valore")
+        self.comboN.place(x=40, y=135, width=200, height=32)
+
+
+        self.saveset_b=ttk.Button(settingsw)
+        
+        self.saveset_b["bg"] = "#00ac69"
+        ft = tkFont.Font(family='Roboto', size=12)
+        self.saveset_b["font"] = ft
+        self.saveset_b["fg"] = "#ffffff"
+        self.saveset_b["justify"] = "center"
+        self.saveset_b["text"] = 'SAVE'
+        self.saveset_b["borderwidth"] = 0
+        self.saveset_b["command"] = selectset
+
+        self.saveset_b.place(x=128, y=260, width=70, height=35)
+
+        #notch frequency
+
+          # dichiaro la combo box per selezionare la notch F
+        
+      
+
+
+
+        
 
 
 
@@ -490,7 +714,7 @@ class App:
                 dat = str(temp[-1])+"°"
                 self.temp_label.config(text=dat)
                 #self.temp_label.place(x=10, y=60, width=140, height=50)
-                print("tempdisp =", str(temp[-1]))
+                #print("tempdisp =", str(temp[-1]))
 
             self.stat()
 
@@ -500,7 +724,8 @@ class App:
             a.set_xlabel('Time [s]')
             a.set_ylabel('Temperature [°C]')
 
-            a.plot( i_time,temp)
+            
+            a.plot( i_time,temp,errors[1],errors[0], "rx")
             if len(temp)>0:
               yticks(np.arange(min(temp), max(temp), step=0.31))
 
@@ -508,7 +733,18 @@ class App:
 
 
 if __name__ == "__main__":
+
+  
+    logging.basicConfig(filename="ErrorLOG.log",
+                                    format='%(asctime)s - %(levelname)s : %(message)s',
+                                    filemode='w' )
+
     root = tk.Tk()
     app = App(root)
-    ani = an.FuncAnimation(f, app.animate,  interval=10, repeat=False)
+    ani = an.FuncAnimation(f, app.animate,  interval=50, repeat=False) #mod
+
+    root.protocol("WM_DELETE_WINDOW", app.on_closing)
+
+
+
     root.mainloop()
