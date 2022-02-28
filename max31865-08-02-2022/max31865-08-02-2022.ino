@@ -28,7 +28,7 @@ Adafruit_MAX31865 thermo = Adafruit_MAX31865( 10, 11, 12, 13);
 #define OVUV 0x04
 
 
-int ftest=0 ;// da rimuovere
+int ftest = 0 ; // da rimuovere
 
 int ind = 0;
 const byte drdyPin = 2;
@@ -49,6 +49,10 @@ byte l = 0xF7;
 bool drdy = false;
 
 
+byte config1S = 0xB0;
+byte configN1S = 0x90;
+
+
 void setup() {
 
 
@@ -66,6 +70,9 @@ void setup() {
 
 
 
+
+
+
 }
 
 
@@ -73,7 +80,7 @@ void setup() {
 
 void loop() {
 
- sendData(); //  serve a inviare i valori di RTD a Python
+  sendData(); //  serve a inviare i valori di RTD a Python
   //Serial.println("loop");
 
 
@@ -83,6 +90,7 @@ void loop() {
 
 void IntReady() {
   drdy = true;
+  //Serial.println("Flip");
 }
 
 //la massima frequenza di campionamento 15S/s
@@ -112,11 +120,11 @@ ISR(TIMER1_OVF_vect) {
 
   if (drdy) {
 
-    drdy = false;
+    //drdy = false; // posizione iniziale
     uint16_t rtd = readRegister(); //mod
-    
-    bool faultdet=checkFault();
-    
+    drdy = false;
+    bool faultdet = checkFault();
+
     if ( !faultdet) {
       //uint16_t rtd = readRegister();
       //Serial.println (rtd);
@@ -124,7 +132,7 @@ ISR(TIMER1_OVF_vect) {
     }
     else {
       cb.push(0);
-    
+
 
     }
 
@@ -133,7 +141,7 @@ ISR(TIMER1_OVF_vect) {
 
 }
 
-//timeperiod è da considerarsi in secondi ricordati che il valore massimo possibile è 4 secondi il minimo 0.000064s (1/15625) cioè il valore del clock diviso il prescaler factor  16MHz/1024 = 15,625KZ
+//timeperiod è da considerarsi in secondi ricordati che il valore massimo possibile è 4 secondi il minimo 0.000064s (1/15625) cioè il valore del clock diviso il prescaler factor  16MHz/1024 = 15,625kHz
 void setCounterStartValue( float timePeriod) {
 
 
@@ -156,9 +164,14 @@ uint16_t  readRegister()
   digitalWrite(chipSelectPin, LOW); // * Chip Select CS: a LOW quando c'è comunicazione (attiva il clock), altrimenti HIGH
 
   SPI.transfer(0x80); //80h = 128 - config register // *-> questa è l'istruzione che indica che configuriamo il registro
-  //SPI.transfer((0xB2) + notch); //B0h = 176 - 10110000.// *: |Bias ON|Conversion normally off|1 shot|3 wire|Fault|Fault|Fault Status clear|60Hz| vedi pagina 13 (prima era B0 per attivare l'autoclear abbiamo settato il bit di riferimento)
-  SPI.transfer((0xB0) + notch);
+
+  //SPI.transfer((0xB0)); //B0h = 176 - 10110000.// *: |Bias ON|Conversion normally off|1 shot|3 wire|Fault|Fault|Fault Status clear|60Hz| vedi pagina 13 (prima era B0 per attivare l'autoclear abbiamo settato il bit di riferimento)
+  //SPI.transfer(0xB1);// ENABLE 50 HZ NOTCH
+
+  SPI.transfer(config1S);
   digitalWrite(chipSelectPin, HIGH);
+
+
 
   digitalWrite(chipSelectPin, LOW);
   SPI.transfer(1);           // !! Registro da leggere
@@ -179,13 +192,16 @@ uint16_t  readRegister()
   //rtdSPI= fullreg; //pass the value to the resistance variable
   //note: this is not yet the resistance of the RTD!
 
+
   digitalWrite(chipSelectPin, LOW);
 
-  SPI.transfer(0x80);                //80h = 128 // * di nuovo la configurazione
-  //SPI.transfer((0x92) + notch);  //144 = 10010000 // * |Bias on|Conversion auto|not 1 shot|3 wire|Fault|Fault|Fault Status clear|60Hz| vedi pagina 13 (prima era 144 per attivaqre l'autoclear del fault abbiamo settato il bit)
+  //SPI.transfer(0x80);                //80h = 128 // * di nuovo la configurazione
 
-  SPI.transfer((144) + notch); // da modificare il valore con 0x90
-  
+  //SPI.transfer((0x90));  //144 = 10010000 // * |Bias on|Conversion auto|not 1 shot|3 wire|Fault|Fault|Fault Status clear|60Hz| vedi pagina 13 (prima era 144 per attivaqre l'autoclear del fault abbiamo settato il bit)
+  // SPI.transfer(0x91); // ENABLE 50 HZ NOTCH
+
+  //SPI.transfer(configN1S);
+
   SPI.endTransaction();              // * fine
   digitalWrite(chipSelectPin, HIGH); //* stoppa il SCLK
 
@@ -227,12 +243,12 @@ void sendData() {
 void sendErr() {
 
   if (!eb.available()) return;
-  
+
   byte dat = 0;
   int sz = eb.size();
 
   byte *pointer = eb.dump();
-  
+
   for (int i = 0; i < sz ; i++) {
 
     dat = *(pointer + i);
@@ -274,23 +290,28 @@ void serialEvent() {
 
           switch (i) {
 
-            case 1:
-              String ts(pointer);
-              t = ts.toFloat();
+            case 1: {
+                String ts(pointer);
+                t = ts.toFloat();
 
-              break;
-
-            case 2:
-              // settare la frequenza di notch
-              String freq(pointer);
-              if (freq.equals("50")) {
-                notch = 0x01;
-              } else {
-                notch = 0;
+                break;
               }
+            case 2: {
+                // settare la frequenza di notch
+                String freq(pointer);
 
-              break;
+                if (freq.equals("50")) {
 
+                  config1S = 0xB1;
+                  configN1S = 0x91;
+                } else {
+
+                  config1S = 0xB0;
+                  configN1S = 0x90;
+                }
+
+                break;
+              }
 
           }
 
@@ -323,6 +344,35 @@ void serialEvent() {
 
       break;
 
+    case 'C': {
+
+        calibrate();
+
+        break;
+      }
+
+    case 'O':{
+       char ch [len];
+        msg.toCharArray(ch, len);
+        char *pointer = strtok(ch, ":");
+        pointer= strtok(NULL,":");
+        String ts(pointer);
+        offset = ts.toFloat();
+
+
+        float volt= abs( (offset/500)*1024);
+
+        uint16_t v= (uint16_t) volt;
+
+        if(offset <0){
+
+          v +=0x8000
+        }
+       //memorizzare il valore di ofset (float) nella eeprom caricare l'ofset allo start up sommare l'offset alle misure 
+        
+      break;
+    }
+
 
   }
 
@@ -348,47 +398,99 @@ void serialEvent() {
 }
 
 
+
+void calibrate() {
+
+  CircularBuffer <uint16_t>  t_LM_35b = CircularBuffer <uint16_t> (10);
+  CircularBuffer <uint16_t>  t_PT100b = CircularBuffer <uint16_t> (10);
+
+  analogRead(A1);
+
+  for (int i = 0; i < 11; i++) { // poichè la prima misura potrebbe essere soggetta a transitori ignoti non la consideriamo nel processo di taratura 
+
+    uint16_t dataRTD = readRegister();
+    t_PT100b.push(dataRTD);
+    uint16_t dataADC = analogRead(A1);
+    t_LM_35b.push(dataADC);
+
+
+    delay(100);
+  }
+
+
+ 
+  int sz = t_PT100b.size(); // restituisce il numero di elementi presenti nel buffer
+  uint16_t *pointer = t_PT100b.dump(); //ritorna il puntatore dei dati da inviare, cioè del primo elemento del buffer
+
+  for (int j = 0; j < 2; j++) {
+    uint16_t dat = 0;
+    uint8_t msb, lsb = 0;
+    for (int i = 0; i < sz; i++) { // per ogni elemento da trasmettere accede ai due byte che compongono il valore di RTD
+
+      dat = *(pointer + i); //prende il valore di RTD (a 16 bit)
+
+      msb = dat >> 8; // insertisce in MSB la parte più significativa del valore di RTD
+      lsb = dat & 0xFF; // insertisce in LSB la parte meno significativa del valore di RTD
+
+      // poichè il metodo write invia un byte per volta è necessario suddividere il dato in due Byte
+      Serial.write(msb);
+      Serial.write(lsb);
+
+      Serial.flush(); // Necessario per  ripulire il canale di comunnicazione
+      
+    }
+    Serial.println(); //da togliere
+    Serial.flush();
+    sz = t_LM_35b.size(); // restituisce il numero di elementi presenti nel buffer
+    pointer = t_LM_35b.dump(); //ritorna il puntatore dei dati da inviare, cioè del primo elemento del buffer
+  }
+
+
+}
+
+
+
 bool checkFault() {
 
-      byte err, conf ;
-   //Serial.println ("vediamo se ci sono degli errori ");
-  
-    // Leggere il registro di fault status 0x07 controllare se il bit (D1) è a 1(allora si è verificato un FAULT) c'è leggiamo i rimanenti bit per valutare il tipo di fault 
-    // settiamo a 1 il bit del configuration register per pulire il Fault Status Register
-   SPI.beginTransaction(SPISettings(500000, MSBFIRST, SPI_MODE1));
-  
-  
-  digitalWrite(chipSelectPin, LOW); // * Chip Select CS: a LOW quand 
+  byte err, conf ;
+  //Serial.println ("vediamo se ci sono degli errori ");
+
+  // Leggere il registro di fault status 0x07 controllare se il bit (D1) è a 1(allora si è verificato un FAULT) c'è leggiamo i rimanenti bit per valutare il tipo di fault
+  // settiamo a 1 il bit del configuration register per pulire il Fault Status Register
+  SPI.beginTransaction(SPISettings(500000, MSBFIRST, SPI_MODE1));
+
+
+  digitalWrite(chipSelectPin, LOW); // * Chip Select CS: a LOW quand
   SPI.transfer(0x07);
-  err=SPI.transfer(0x00);
+  err = SPI.transfer(0x00);
   digitalWrite(chipSelectPin, HIGH);
 
-  
+
   digitalWrite(chipSelectPin, LOW);
   SPI.transfer(0x00);
-  conf=SPI.transfer(0x00);
+  conf = SPI.transfer(0x00);
   digitalWrite(chipSelectPin, HIGH);
 
-  
-  conf |= 0x02; // Dovrebbe? modificare solo il Auto Clear flag 
+
+  conf |= 0x02; // Dovrebbe? modificare solo il Auto Clear flag
 
 
   digitalWrite(chipSelectPin, LOW);
   SPI.transfer(0x80);
   SPI.transfer(conf);
 
-  SPI.endTransaction(); 
+  SPI.endTransaction();
   digitalWrite(chipSelectPin, HIGH);
 
-  
-   if (err!=0){
+
+  if (err != 0) {
 
     eb.push(err);
     return true;
-    
-   }
- 
-  
+
+  }
+
+
 
   return  false;
 }
