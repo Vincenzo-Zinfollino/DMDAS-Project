@@ -2,6 +2,7 @@
 #include <Adafruit_MAX31865.h>
 #include <SPI.h>
 #include "CircularBuffer.h"
+#include <EEPROM.h>
 
 // Use software SPI: CS, DI, DO, CLK
 //CS => CS //Arduino 10
@@ -52,6 +53,8 @@ bool drdy = false;
 byte config1S = 0xB0;
 byte configN1S = 0x90;
 
+float offset;
+
 
 void setup() {
 
@@ -67,8 +70,13 @@ void setup() {
   pinMode(drdyPin, INPUT);
   attachInterrupt(digitalPinToInterrupt(drdyPin), IntReady, FALLING);// dopo aver effettuato la prima lettura il pin DRDY va a basso quando è disponibile un nuovo dato, questo sistema funge dopo la prima lettura
 
+  //EEPROM.put(0, offset);
+  EEPROM.get(0, offset);
 
 
+
+  /*Serial.println("il valore di offset");
+    Serial.print (offset);*/
 
 
 
@@ -269,11 +277,24 @@ void serialEvent() {
   int len;
 
 
+
   msg = Serial.readString();
+
+
+
 
 
   // !!!! WARNING : ricorda che quando dichiari una variabile all interno di uno switch case vanno inserire le parentesi attorno al case altrimenti non prosegue
   switch (msg[0]) {
+
+
+    case 'J': {
+
+
+        setOffset(msg);
+
+        break;
+      }
 
     case 'S': {
         //  inizializziamo  il timer e facciamo la prima richiesta
@@ -338,11 +359,12 @@ void serialEvent() {
       Serial.end();
       break;
 
-    case 'F':
+    case 'F': {
 
-      sendErr();
+        sendErr();
 
-      break;
+        break;
+      }
 
     case 'C': {
 
@@ -351,27 +373,7 @@ void serialEvent() {
         break;
       }
 
-    case 'O':{
-       char ch [len];
-        msg.toCharArray(ch, len);
-        char *pointer = strtok(ch, ":");
-        pointer= strtok(NULL,":");
-        String ts(pointer);
-        offset = ts.toFloat();
 
-
-        float volt= abs( (offset/500)*1024);
-
-        uint16_t v= (uint16_t) volt;
-
-        if(offset <0){
-
-          v +=0x8000
-        }
-       //memorizzare il valore di ofset (float) nella eeprom caricare l'ofset allo start up sommare l'offset alle misure 
-        
-      break;
-    }
 
 
   }
@@ -397,6 +399,39 @@ void serialEvent() {
 
 }
 
+void setOffset(String msg) {
+  //Serial.println("WRyyyyyyyyyyyyyyyyyyyyyyyyA");
+  //Serial.println("CRISTINA LA COLOMBINA DI MERDA!");
+  
+
+  int len = msg.length();
+  char ch [len];
+  msg.toCharArray(ch, len);
+  char *pointer = strtok(ch, ":");
+  pointer = strtok(NULL, ":");
+  String ts(pointer);
+  offset += ts.toFloat();
+
+  //Serial.println("il valore dell' offset ricevuto è");
+  //Serial.print (offset);
+
+  //float offsetG=  (offset/500)*1024;
+
+  /*uint16_t v= (uint16_t) volt;
+
+    if(offset <0){
+
+    v +=0x8000 //serve per identificare un valore di offset negativo poichè la parte MSB risulta non  significativa inseriamo un 1 al bit più significativo per identificare il segno 0 POSITIVO 1 NEGATIVO
+    }
+
+    //memorizzare il valore di offset (float) nella eeprom caricare l'offset allo start up sommare l'offset alle misure */
+
+  //offset=0; serve per debugging 
+  EEPROM.put(0, offset);
+
+  Serial.end();
+
+}
 
 
 void calibrate() {
@@ -404,13 +439,31 @@ void calibrate() {
   CircularBuffer <uint16_t>  t_LM_35b = CircularBuffer <uint16_t> (10);
   CircularBuffer <uint16_t>  t_PT100b = CircularBuffer <uint16_t> (10);
 
+  uint16_t bOff = (uint16_t) abs( offset);
+  /*Serial.println ("valore di offset");
+    Serial.println (bOff);
+    Serial.flush();*/
+
+
+
   analogRead(A1);
 
-  for (int i = 0; i < 11; i++) { // poichè la prima misura potrebbe essere soggetta a transitori ignoti non la consideriamo nel processo di taratura 
+
+  for (int i = 0; i < 11; i++) { // poichè la prima misura potrebbe essere soggetta a transitori ignoti non la consideriamo nel processo di taratura
 
     uint16_t dataRTD = readRegister();
     t_PT100b.push(dataRTD);
     uint16_t dataADC = analogRead(A1);
+
+    //somma offset
+    if (offset < 0) {
+
+      dataADC -= bOff;
+    } else {
+      dataADC += bOff;
+    }
+
+
     t_LM_35b.push(dataADC);
 
 
@@ -418,7 +471,7 @@ void calibrate() {
   }
 
 
- 
+
   int sz = t_PT100b.size(); // restituisce il numero di elementi presenti nel buffer
   uint16_t *pointer = t_PT100b.dump(); //ritorna il puntatore dei dati da inviare, cioè del primo elemento del buffer
 
@@ -437,9 +490,9 @@ void calibrate() {
       Serial.write(lsb);
 
       Serial.flush(); // Necessario per  ripulire il canale di comunnicazione
-      
+
     }
-    Serial.println(); //da togliere
+    Serial.println();
     Serial.flush();
     sz = t_LM_35b.size(); // restituisce il numero di elementi presenti nel buffer
     pointer = t_LM_35b.dump(); //ritorna il puntatore dei dati da inviare, cioè del primo elemento del buffer

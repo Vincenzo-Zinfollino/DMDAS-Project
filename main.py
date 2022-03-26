@@ -8,6 +8,7 @@
 from asyncore import read
 from base64 import encode
 import csv
+from distutils.log import error
 import math
 from multiprocessing.connection import wait
 from multiprocessing.sharedctypes import Value
@@ -236,14 +237,14 @@ def calibrate(self):
        
         self.s_data.readline() 
         
-
+        
         self.s_data.write(bytes("C\n","ascii"))
         self.s_data.flush()
 
         readingPt100=self.s_data.readline().hex()
         readingLM35=self.s_data.readline().hex()
 
-
+       
         self.valPt100 = []
         self.valLM35  =[]
         
@@ -260,12 +261,21 @@ def calibrate(self):
         self.offset=np.average(error)
         print(self.offset)
 
-    
-        self.s_data.write(bytes(f"O:{round(self.offset,2)}\n","ascii"))
+
+        self.offset=(self.offset/500)*1024
+        datasend = f"J:{round(self.offset,2)}\n"
+        #self.s_data.write(bytes(f"J:{round(self.offset,2)}\n","ascii"))
+        self.s_data.write(bytes(datasend,"ascii"))
+     
+      
+        self.s_data.read(size=0) #da inserire dopo ogni scrittura sulla seriale altrimenti Arduino Soffoca
+        
+        #print("datasend :",datasend)
+        #self.s_data.flush()
 
         #TODO[ricordatevi d'inviare i dati PUTTANI !!!!!!! ]
 
-        self.s_data.close() #ricordati di chiudere la seriale altrimenti non partono le misurazioni 
+        #self.s_data.close() #ricordati di chiudere la seriale altrimenti non partono le misurazioni 
         
         
 
@@ -339,16 +349,16 @@ class measure(threading.Thread):
                     read=reading.hex()
 
                     if read!="00":
-                       logging.error(fault[read])
+                        logging.error(fault[read])
                     
-                   # inseriamo i fault 
+                # inseriamo i fault 
                 except: return
 
 
-   
+
 
     def run(self):
-      
+    
         self.method(self)
 
         
@@ -362,7 +372,7 @@ class measure(threading.Thread):
 
 
     def stop(self):
-         
+        
 
         if (self.s_data.isOpen()):
 
@@ -595,9 +605,9 @@ class App:
         def start_t():
 
             cl.start()
-            print("hello0")
+
             cl.join() #attende che il thread abbia completato l'operazione
-            print (cl.valPt100,cl.valLM35,cl.offset)
+            
 
             calibratew = ttk.Toplevel(root)
 
@@ -901,7 +911,7 @@ class App:
           
                 self.temp_Slider.configure(state="normal")
             else:
-                 self.temp_Slider.configure(state="disabled")
+                self.temp_Slider.configure(state="disabled")
 
 
         
@@ -997,9 +1007,12 @@ class App:
         if self.is_running:
             #temp_1=[float(i) for i in temp]
 
-            if len(temp)>1:
+
+            if len(temp)>0:
                 dat = str(temp[-1])+"°"
-                self.temp_label.config(text=dat)
+
+                self.temp_label.config(text=dat)              
+
                 #self.temp_label.place(x=10, y=60, width=140, height=50)
                 #print("tempdisp =", str(temp[-1]))
 
