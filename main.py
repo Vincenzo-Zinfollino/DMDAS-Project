@@ -14,6 +14,7 @@ from multiprocessing.connection import wait
 from multiprocessing.sharedctypes import Value
 from pickle import NONE
 from queue import Empty
+from re import S
 import sys
 import tkinter as tk
 import tkinter as ttk
@@ -173,7 +174,7 @@ def acquire_data(self):
                 elif settings["TARGETTEMP"] is not None and t>=settings["TARGETTEMP"]:
                         t_time.append([self.instant])
 
-                #print (t_time)
+                print (t_time)
                     
 
                 if len(temp)>1 and (dif>40): #rileva gli sbalzi di temperatura
@@ -219,6 +220,22 @@ def acquire_data(self):
         # print(i_time)
         #print(temp)
         #time.sleep(settings["STEP"])
+
+def resetOffset(self):
+
+    self.end=False
+    self.s_data.port=self.port
+    self.s_data.open()
+
+    if self.s_data.isOpen():
+
+        self.s_data.flush()
+        self.s_data.readline() 
+          
+        self.s_data.write(bytes("R\n","ascii"))
+        self.s_data.read(size=0)
+        self.s_data.flush()
+
 
 
 
@@ -274,6 +291,9 @@ def calibrate(self):
         #self.s_data.flush()
 
         #TODO[ricordatevi d'inviare i dati PUTTANI !!!!!!! ]
+
+        self.s_data.write(bytes("T\n","ascii"))
+        self.s_data.read(size=0)
 
         #self.s_data.close() #ricordati di chiudere la seriale altrimenti non partono le misurazioni 
         
@@ -599,10 +619,12 @@ class App:
 
         startcalibratew = ttk.Toplevel(root)
         
-        cl=measure(settings["COMPORT"],settings["BAUDRATE"],calibrate)
-        cl.deamon=True
+        
 
         def start_t():
+
+            cl=measure(settings["COMPORT"],settings["BAUDRATE"],calibrate)
+            cl.deamon=True
 
             cl.start()
 
@@ -667,6 +689,16 @@ class App:
 
             
 
+        def reset_c():
+            
+            cl=measure(settings["COMPORT"],settings["BAUDRATE"],resetOffset)
+            cl.deamon=True
+
+            cl.start()
+
+            cl.join() #attende che il thread abbia completato l'operazione
+            
+
 
 
 
@@ -674,7 +706,7 @@ class App:
         if not self.is_running:
             
             width = 300
-            height = 200
+            height = 250
 
             screenwidth =  startcalibratew.winfo_screenwidth()
             screenheight =  startcalibratew.winfo_screenheight()
@@ -699,6 +731,18 @@ class App:
             start["borderwidth"] = 0
             start.place(x=80, y=100, width=140, height=50)
             start["command"] = start_t
+
+
+            setz=ttk.Button(startcalibratew)
+            setz["bg"] = "#d02c2f"
+            ft = tkFont.Font(family='Roboto', size=10)
+            setz["font"] = ft
+            setz["fg"] = "#ffffff"
+            setz["justify"] = "center"
+            setz["text"] = "RESET"
+            setz["borderwidth"] = 0
+            setz.place(x=25, y=190, width=70, height=25)
+            setz["command"] = reset_c
                
 
 
@@ -721,14 +765,27 @@ class App:
         def save():
 
             if len(temp) > 1:
-                self.filepath = tk.filedialog.askdirectory() + '/' + self.filename.get()
-                with open(self.filepath, 'w', newline='', encoding='UTF8') as csv_file:
+                self.filepath = tk.filedialog.askdirectory()
+                FilePosition=self.filepath + '/' + self.filename.get()
+                with open(FilePosition, 'w', newline='', encoding='UTF8') as csv_file:
                     write = csv.writer(csv_file)
-                    write.writerow(["time", "temperature"])
+                    write.writerow(["Time", "Temperature"])
                     for i in range(len(temp)):
                         row = [str(i_time[i]), str(temp[i])]
                         print(row)
                         write.writerow(row)
+
+                if(settings["TARGETTEMP"] is not None):
+                    SidecarFilePosition=self.filepath + '/' + "TIME_INTERVAL" + self.filename.get()
+                    with open(SidecarFilePosition, 'w', newline='', encoding='UTF8') as csv_file:
+                        write = csv.writer(csv_file)
+                        write.writerow([ "Temperature","Rising","Falling"," Interval"])
+                        for i in range(len(t_time)):
+                            row = [settings["TARGETTEMP"],t_time]
+                            print(row)
+                            write.writerow(row)
+
+
             else:
                 messagebox.showinfo("Impossibile salvare i dati "," Impossibile salvare i dati, non sono stati trovati dati oppure \n il processo di misura potrebbe non essere stato avviato. ")
 
@@ -742,7 +799,7 @@ class App:
         #---Window Declaring
         saveData_w = ttk.Toplevel(root)
         width = 320
-        height = 165
+        height = 200
         screenwidth = saveData_w.winfo_screenwidth()
         screenheight = saveData_w.winfo_screenheight()
         alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth - width) / 2, (screenheight - height) / 2)
@@ -752,20 +809,28 @@ class App:
         #saveData_w.iconbitmap("Icona.ico")
         # --- END  Window Declaring
 
-
-        self.label1 = ttk.Label(saveData_w, text="Scegli il nome del file ")
-        self.label1.place(x=20, y=20 )
+        ft = tkFont.Font(family='Roboto', size=10)
+        self.label1 = ttk.Label(saveData_w, text="Scegli il nome del file ",font=ft)
+        self.label1.place(x=15, y=20 )
 
         self.s_filename='TEMPMEAS'+str(datetime.timestamp(datetime.now()))
 
         self.filename=tk.Entry(saveData_w, textvariable=self.s_filename )
         self.filename.insert(0,self.s_filename +'.csv')
-        self.filename.place(x=20,y=50, width=250, height=20)
+        self.filename.place(x=30,y=50, width=250, height=20)
         print(self.s_filename)
 
 
+        if ( (len(t_time)>0) and (settings["TARGETTEMP"] is not None )):
+           
+            ft = tkFont.Font(family='Roboto', size=10)
+            self.label1 = ttk.Label(saveData_w, text=" Il traking della temperatura è attivo,\n sarà creato un file sidecar contenente tutti i dati ",font=ft)
+            self.label1.place(x=30, y=80)
+
+
+
         self.save_b=ttk.Button(saveData_w)
-        self.save_b.place(x=125, y=110, width=70, height=35)
+        self.save_b.place(x=125, y=150, width=70, height=35)
 
         self.save_b["bg"] = "#00ac69"
         ft = tkFont.Font(family='Roboto', size=12)

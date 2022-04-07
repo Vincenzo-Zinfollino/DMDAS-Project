@@ -347,10 +347,12 @@ void serialEvent() {
 
         break;
       }
-    case 'R':
-      // vengono inviati i dati
-      Serial.print("WRYYY R");
+    case 'R':{
+      // viene azzerato loffset
+      offset=0;
+     EEPROM.put(0, offset);
       break;
+    }
     case 'T':
 
       noInterrupts();
@@ -429,7 +431,7 @@ void setOffset(String msg) {
   //offset=0; serve per debugging 
   EEPROM.put(0, offset);
 
-  Serial.end();
+  //Serial.end(); // Poiche invio T subito dopo la calibrazione dovrebbe non servire 
 
 }
 
