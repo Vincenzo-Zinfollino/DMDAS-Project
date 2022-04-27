@@ -17,7 +17,7 @@ public:
     bool available();
     int size();
     // void dump(uint16_t *arr);
-    T *dump();
+    void *dump( T *toReturn );
     //   JUST FOR DEBUG PURPOSES
     void show();
 };

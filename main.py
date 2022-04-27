@@ -41,13 +41,13 @@ matplotlib.use("TkAgg")
 
 
 settings = {
-    "COMPORT": "COM6",
+    "COMPORT": "COM3",
     "RNOMINAL": 100,
     "BAUDRATE": 115200,
     "REFRESISTOR": 430,
     "STEP": 0,
     "WINDOWSIZE": 100,
-    "TIMER": 0.5,
+    "TIMER": 1,
     "NOTCH": 60,
     "ERROR": 5,
     "TARGETTEMP": None
@@ -97,16 +97,20 @@ def acquire_data(self):
 
     while self.running and self.s_data is not None and self.s_data.isOpen():
         try:
-            reading = self.s_data.read(2)  # prova a leggere 2 byte
+            reading = self.s_data.read(4)  # prova a leggere 2 byte ?? Da modificare a 4 se vogliamo leggere anche i millis 
+            print("reading : ", reading )
         except:
             break
 
         read = reading.hex()  # converti i caratteri in valori hex
+        print("read", read)
+        millis=int(read[0:4], 16)/1000
+        print ("mills :" , millis)
         val = []
-        for i in range(0, len(read), 4):
+        for i in range(4, len(read), 4):
             # converti da base 16 (hex) a base 10
             val.append(int(read[i:i+4], 16))
-
+        print ("val: ",val) #??
         for rtd in val:  # per ogni valore di rtd ricevuto dalla lettura
             # converti da rtd ad un valore di temperatura
             t = round(self.rtd_to_temp(rtd), 2)
@@ -118,7 +122,7 @@ def acquire_data(self):
                 # inserisci la misura appena effettuata all'interno della lista di temperature
                 temp.append(t)
                 # aggiungi alla lista degli istanti di campionamento l'istante corrente
-                i_time.append(float(self.instant))
+                
                 if len(temp) > 1:  # se più di un campione è stato raccolto
                     # se è stata impostata una temperatura target e la temperatura corrente l'ha superata
                     if (settings["TARGETTEMP"] is not None) and (t >= settings["TARGETTEMP"]) and (temp[-2] < settings["TARGETTEMP"]):
@@ -140,7 +144,8 @@ def acquire_data(self):
                     logging.warning(
                         f"Salto di temperatura di :{round(dif,2)}° all istante {self.instant}")
                 # incrementa l'istante di campionamento e passa al successivo
-                self.instant = self.instant + settings["TIMER"]
+                self.instant = self.instant + millis
+                i_time.append(float(self.instant))
             else:
                 # se un errore è rilevato
                 count_err += 1
@@ -148,10 +153,10 @@ def acquire_data(self):
                 if len(temp) > 0:
                     # mantieni la l'ultimo valore corretto per evitare "buchi" nei dati
                     temp.append(temp[-1])
-                    i_time.append(float(self.instant))
                     errors[0].append(temp[-1])
                     errors[1].append(self.instant)
-                    self.instant = self.instant + settings["TIMER"]
+                    self.instant = self.instant + millis 
+                    i_time.append(float(self.instant))
                 # se il limite di errori consecutivi è stato raggiunto
                 if count_err == settings["ERROR"]:
                     # mostra un messaggio d'errore
@@ -691,8 +696,10 @@ class App:
             self.std = np.std(temp[-(settings["WINDOWSIZE"]+1):-1])
 
         if self.avg is not None and self.std is not None:
-            self.avg_label.config(text=round(self.avg, 2)+"°C")
-            self.std_label.config(text=round(self.std, 2)+"°C")
+
+            
+            self.avg_label.config(text= str(round(self.avg, 2))+"°C")
+            self.std_label.config(text=str(round(self.std, 2))+"°C")
 
     # m_serial seleziona la porta seriale corretta da usare per le comunicazioni
 
@@ -878,6 +885,7 @@ class App:
         if self.is_running:
             if len(temp) > 0:
                 dat = str(temp[-1])+"°"  # mostra la temperatura corrente
+                
                 self.temp_label.config(text=dat)
 
             self.stat()

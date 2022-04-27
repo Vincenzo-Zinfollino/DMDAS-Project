@@ -27,11 +27,16 @@ const byte drdyPin = 2;        // pin di dataready
 const byte chipSelectPin = 10; // pin di chip selection
 
 CircularBuffer<uint16_t> cb = CircularBuffer<uint16_t>(32); // buffer di valori
-CircularBuffer<byte> eb = CircularBuffer<byte>(5);          // buffer di fault
+CircularBuffer<byte> eb = CircularBuffer<byte>(32);          // buffer di fault
+CircularBuffer<uint16_t> dt_b= CircularBuffer<uint16_t>(32);
+
 
 byte reg1, reg2; // MSB e LSB del registro RTD
 uint16_t fullreg;
 byte notch = 0; // valore di notch
+
+uint16_t prevT=0;
+uint16_t currT=0;
 
 byte h = 0xC2;
 byte l = 0xF7;
@@ -88,6 +93,15 @@ ISR(TIMER1_OVF_vect)
   if (drdy)
   {
     uint16_t rtd = readRegister(); // leggi il valore di rtd dal registro
+    if(prevT>0){
+
+      dt_b.push(currT-prevT); // memorizza nell'apposito buffer l'intervallo di tempo trascorso dall' ultimo campionamento 
+     
+      }else{
+          dt_b.push(0); // inserisce l'istante di tempo della prima misura 
+        }
+    prevT=currT; // sostituisce l'istante  precedente con il successivo per effettuare la nuova differenza 
+    
     drdy = false;                  // poni il bit di dataready a false
     bool faultdet = checkFault();  // verifica la presenza di fault
     if (!faultdet)
@@ -127,6 +141,7 @@ uint16_t readRegister()
   reg1 = SPI.transfer(0xFF); // !! leggi MSB
   reg2 = SPI.transfer(0xFF); // !! leggi LSB
   digitalWrite(chipSelectPin, HIGH);
+  currT=millis();
   // ------------------------
   // * dato che i registri sono a 8 bit e che il numero è un intero a 16 bit, l'unico modo per memorizzare l'intero dato
   // * è dividerlo in 2 registri, quando i registri sono letti bisogna concatenarli
@@ -138,6 +153,7 @@ uint16_t readRegister()
   // ------------------------
   SPI.endTransaction();              // * fine
   digitalWrite(chipSelectPin, HIGH); //* ferma il clock seriale
+  
   return fullreg;
 }
 
@@ -147,20 +163,36 @@ void sendData()
   if (!cb.available())
     return; // se il buffer è vuoto esce dal metodo
   uint16_t dat = 0;
-  uint8_t msb, lsb = 0;
+ 
   int sz = cb.size();            // restituisce il numero di elementi presenti nel buffer
-  uint16_t *pointer = cb.dump(); // ritorna il puntatore dei dati da inviare, cioè del primo elemento del buffer
+  uint16_t point[32];
+  cb.dump(point); // ritorna il puntatore dei dati da inviare, cioè del primo elemento del buffer
+  uint8_t msb, lsb , msbi, lsbi = 0;
+  uint16_t istant[32];
+  dt_b.dump(istant);
+  uint16_t ist=0;
+  
 
   for (int i = 0; i < sz; i++)
-  {                       // per ogni elemento da trasmettere accede ai due byte che compongono il valore di RTD
-    dat = *(pointer + i); // prende il valore di RTD (a 16 bit)
+  {                       
+    ist = *(istant + i);
+    msbi = ist >> 8;
+    lsbi = ist & 0xFF;
+    Serial.write(msbi);
+    Serial.write(lsbi);
+    //Serial.flush(); // Necessario per  ripulire il canale di comunnicazione
+
+    // per ogni elemento da trasmettere accede ai due byte che compongono il valore di RTD
+    dat = *(point + i); // prende il valore di RTD (a 16 bit)
     msb = dat >> 8;       // insertisce in MSB la parte più significativa del valore di RTD
     lsb = dat & 0xFF;     // insertisce in LSB la parte meno significativa del valore di RTD
     // poichè il metodo write invia un byte per volta è necessario suddividere il dato in due Byte
     Serial.write(msb);
     Serial.write(lsb);
+    if( istant==point)Serial.println("colombina di merda");
+  
     Serial.flush(); // Necessario per  ripulire il canale di comunnicazione
-    // Serial.println(); //da togliere
+    
   }
 }
 
@@ -171,7 +203,8 @@ void sendErr()
     return;
   byte dat = 0;
   int sz = eb.size();
-  byte *pointer = eb.dump(); // prendi i valori da trasmettere
+  byte pointer[32];
+  eb.dump(pointer); // prendi i valori da trasmettere
   for (int i = 0; i < sz; i++)
   {
     dat = *(pointer + i);
@@ -242,6 +275,7 @@ void serialEvent()
     setCounterStartValue(t);
     setupTimer();
     uint16_t rtd = readRegister(); // Effettua la prima lettura necessaria all avvio del processo di misurazione
+    currT=0;
     break;
   }
   case 'R':
@@ -255,6 +289,7 @@ void serialEvent()
     // interrompi tutte le comunicazioni
     // noInterrupts(); ?? modificato
     Serial.println("EOT");
+    TIMSK1 &= ~(1 << OCIE1A); // serve a disabilitare l'interrupt del timer
     Serial.flush();
     Serial.end();
     break;
@@ -315,7 +350,8 @@ void calibrate()
   }
 
   int sz = t_PT100b.size();            // restituisce il numero di elementi presenti nel buffer
-  uint16_t *pointer = t_PT100b.dump(); // ritorna il puntatore dei dati da inviare, cioè del primo elemento del buffer
+  uint16_t pointer[32];
+  t_PT100b.dump(pointer); // ritorna il puntatore dei dati da inviare, cioè del primo elemento del buffer
   for (int j = 0; j < 2; j++)
   {
     uint16_t dat = 0;
@@ -333,7 +369,7 @@ void calibrate()
     Serial.println();
     Serial.flush();
     sz = t_LM_35b.size();      // restituisce il numero di elementi presenti nel buffer
-    pointer = t_LM_35b.dump(); // ritorna il puntatore dei dati da inviare, cioè del primo elemento del buffer
+    t_LM_35b.dump(pointer); // ritorna il puntatore dei dati da inviare, cioè del primo elemento del buffer
   }
 }
 
@@ -373,5 +409,3 @@ bool checkFault()
 }
 
 // WRYYY
-
-ㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤㅤ
