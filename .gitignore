@@ -1,2 +1,4 @@
 ErrorLOG.log
 dist/
+.vscode
+.idea
