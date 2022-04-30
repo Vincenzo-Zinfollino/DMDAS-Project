@@ -18,6 +18,7 @@ from tkinter.ttk import *
 import tkinter.font as tkFont
 from tkinter import RAISED, Tk, messagebox
 from datetime import datetime
+from datetime import timedelta
 from tkinter.filedialog import askopenfilename
 import unicodedata
 from unittest import skip
@@ -73,10 +74,11 @@ f = Figure(figsize=(7.5, 5), dpi=100)
 a = f.add_subplot(111)
 a.set_xlabel('Time [s]')
 a.set_ylabel('Temperature [°C]')
-
+starting_time=None
 
 # acquire_data è il metodo utilizzato per ricevere i dati delle misure via SPI
 def acquire_data(self):
+    global starting_time
     self.s_data.port = self.port
     count_err = 0  # necessario per terminare automaticamente il processo di misura se ci sono tropp errori consecutivi
 
@@ -98,14 +100,15 @@ def acquire_data(self):
     while self.running and self.s_data is not None and self.s_data.isOpen():
         try:
             reading = self.s_data.read(4)  # prova a leggere 2 byte ?? Da modificare a 4 se vogliamo leggere anche i millis 
-            print("reading : ", reading )
+
+            if starting_time is None:
+                starting_time=datetime.now()
         except:
             break
-
+        
         read = reading.hex()  # converti i caratteri in valori hex
-        print("read", read)
         millis=int(read[0:4], 16)/1000
-        print ("mills :" , millis)
+        
         val = []
         for i in range(4, len(read), 4):
             # converti da base 16 (hex) a base 10
@@ -161,7 +164,7 @@ def acquire_data(self):
                 if count_err == settings["ERROR"]:
                     # mostra un messaggio d'errore
                     if self.running:
-                        if (messagebox.askokcancel("ERRORE", "Sono stati rilevati un numero elevato di errori.\nLe misure potrebbero non essere attendibili.\nVuoi terminare ?")):
+                        if (messagebox.askokcancel("ERROR", "Many errors were detected.\n Measurment could be incorrect.\n Do you want to stop ?")):
                             app.stop_command()  # interrompi il processo di misura
                             self.stop()  # ferma il thread
                         else:
@@ -316,7 +319,7 @@ class App:
         self.avg = None
         self.std = None
         # imposta il titolo
-        root.title("Progetto DMDAS")
+        root.title("DMDAS Project")
         # imposta la dimensione della finestra
         width = 1200
         height = 800
@@ -389,7 +392,7 @@ class App:
         toolbar.update()
 
         # left side -------------
-        self.l1 = tk.Label(root, text='La temperatura corrente è:')
+        self.l1 = tk.Label(root, text='Current Temperature [°C]:')
         self.l1.place(x=110, y=60, width=270, height=20)
         ft = tkFont.Font(family='Roboto', size=10)
         self.l1["font"] = ft
@@ -429,7 +432,7 @@ class App:
         self.std_label["bg"] = "#696969"
 
         # Temperature Track --------
-        self.l4 = tk.Label(root, text='Temperatura monitorata :')
+        self.l4 = tk.Label(root, text='Target temperature [°C]:')
         self.l4.place(x=110, y=450, width=270, height=20)
         ft = tkFont.Font(family='Roboto', size=10)
         self.l4["font"] = ft
@@ -444,11 +447,8 @@ class App:
         # END left side ------
 
     def start_command(self):
-        print("Start")
         self.start["state"] = "disable"
-
         # dichiarazione thread
-        print("start port :", settings["COMPORT"])
         # definisci il thread
         self.measT = measure(
             settings["COMPORT"],
@@ -463,7 +463,6 @@ class App:
     # stop_command è il metodo che è assegnato al pulsante di stop
 
     def stop_command(self):
-        print("stop")
         self.is_running = self.measT.stop()  # ferma il thread
         ani.pause()
         plt.close()
@@ -472,7 +471,7 @@ class App:
     def on_closing(self):
         if self.is_running:
             # se le misure sono ancora in corso avverti l'utente
-            if (messagebox.askokcancel("Esci", "Le misure sono ancora in corso.\nSei Sicuro di voler terminare ?")):
+            if (messagebox.askokcancel("Exit", "The measurment process is still running !\n Are you sure you want to stop it?")):
                 self.stop_command()
                 root.destroy()
             else:
@@ -508,7 +507,7 @@ class App:
             for i in range(len(cl.valPt100)):
                 ft = tkFont.Font(family='Roboto', size=13)
                 self.label1 = ttk.Label(
-                    calibratew, text="Misure del device di riferimento ", font=ft)
+                    calibratew, text="Measures of the reference device :", font=ft)
                 self.label1.place(x=50, y=70)
                 valuelabelPT100.append(tk.Label(calibratew, text='--'))
                 valuelabelPT100[-1].place(
@@ -524,7 +523,7 @@ class App:
 
                 ft = tkFont.Font(family='Roboto', size=13)
                 self.label1 = ttk.Label(
-                    calibratew, text="Misure del device da tarare ", font=ft)
+                    calibratew, text="Measures of the device to be calibrated :", font=ft)
                 self.label1.place(x=50, y=190)
 
                 valuelabelLM35.append(tk.Label(calibratew, text='--'))
@@ -537,7 +536,7 @@ class App:
 
             ft = tkFont.Font(family='Roboto', size=13)
             self.label1 = ttk.Label(
-                calibratew, text="Il valore di Offset rilevato", font=ft)
+                calibratew, text="Offset value :", font=ft)
             self.label1.place(x=335, y=300)
 
             self.temp_label = tk.Label(
@@ -597,7 +596,7 @@ class App:
             setz["command"] = reset_c
         else:
             messagebox.showerror(
-                "Esci", "Le misure sono ancora in corso.\nPuoi effettuare il proceso di calibrazione solo prima d'iniziare il processo di misurazione")
+                "Exit", "the measurement process is still running \n You can't calibrate the sensor when the measuring process has started")
 
     #
     def m_open(self):
@@ -609,32 +608,35 @@ class App:
         # --- definizione del metodo di salvataggio --- #
 
         def save():
+            
+            global starting_time
+
             if len(temp) > 1:
                 self.filepath = tk.filedialog.askdirectory()
-                FilePosition = self.filepath + '/' + self.filename.get()
+                FilePosition = self.filepath + '/' + self.filename.get() 
                 with open(FilePosition, 'w', newline='', encoding='UTF8') as csv_file:
                     write = csv.writer(csv_file)
-                    write.writerow(["Time", "Temperature"])
+                    write.writerow(["Timestamp","Time", "Temperature"])
+
                     for i in range(len(temp)):
-                        row = [str(i_time[i]), str(temp[i])]
+                        row = [str(starting_time+timedelta(seconds=i_time[i])),str(round (i_time[i],3)), str(temp[i])]
                         print(row)
                         write.writerow(row)
 
                 if(settings["TARGETTEMP"] is not None):
                     SidecarFilePosition = self.filepath + '/' + \
                         "TIME_INTERVAL" + self.filename.get()
-                    with open(SidecarFilePosition, 'w', newline='', encoding='UTF8') as csv_file:
+                    with open(SidecarFilePosition, 'w', newline='', encoding='UTF8') as csv_file:  
                         write = csv.writer(csv_file)
                         write.writerow(
-                            ["Temperature", "Rising", "Falling", " Interval"])
+                            ["TarghetTemperature", "Rising", "Falling", " Interval"])
                         for i in range(len(t_time)):
-                            row = [settings["TARGETTEMP"], t_time]
-                            print(row)
+                            row=[settings["TARGETTEMP"]]+[round(t,3) for t in t_time[i]]
                             write.writerow(row)
             else:
-                messagebox.showinfo("Impossibile salvare i dati ",
-                                    " Impossibile salvare i dati, non sono stati trovati dati oppure \n il processo di misura potrebbe non essere stato avviato. ")
-        # --- dine della definizione del metodo di salvataggio --- #
+                messagebox.showinfo("Impossible to save data ",
+                                    " Impossible to save data , no data was found or  \n the measurement process could not have been started. ")
+        # --- fine della definizione del metodo di salvataggio --- #
 
             saveData_w.destroy()
             print(self.filepath)
@@ -655,7 +657,7 @@ class App:
 
         ft = tkFont.Font(family='Roboto', size=10)
         self.label1 = ttk.Label(
-            saveData_w, text="Scegli il nome del file ", font=ft)
+            saveData_w, text="Select file name ", font=ft)
         self.label1.place(x=15, y=20)
 
         self.s_filename = 'TEMPMEAS'+str(datetime.timestamp(datetime.now()))
@@ -669,7 +671,7 @@ class App:
 
             ft = tkFont.Font(family='Roboto', size=10)
             self.label1 = ttk.Label(
-                saveData_w, text=" Il traking della temperatura è attivo,\n sarà creato un file sidecar contenente tutti i dati ", font=ft)
+                saveData_w, text=" Temperature traking  is active,\n  a sidecar file will be created ", font=ft)
             self.label1.place(x=30, y=80)
 
         self.save_b = ttk.Button(saveData_w)
@@ -698,7 +700,7 @@ class App:
         if self.avg is not None and self.std is not None:
 
             
-            self.avg_label.config(text= str(round(self.avg, 2))+"°C")
+            self.avg_label.config(text=str(round(self.avg, 2))+"°C")
             self.std_label.config(text=str(round(self.std, 2))+"°C")
 
     # m_serial seleziona la porta seriale corretta da usare per le comunicazioni
@@ -712,9 +714,9 @@ class App:
             porttest = self.comboP.get()
             if not self.is_running:
                 # se non è stato selezionato alcun vaore appare un messaggio di errore.
-                if porttest == "Scegli un valore":
+                if porttest == "Select a value":
                     messagebox.showinfo(
-                        "Impossibile salvare la preferenza:", " Selezionare una porta valida")
+                        "The peverences cannot be saved:", "You must select a valid port !")
                 else:
                     psel = porttest.split(" ")
                     # poichè potrebbe non essere COM3 ma avere più digit divido la stringa
@@ -724,7 +726,7 @@ class App:
                     serial_w.destroy()
             else:
                 messagebox.showinfo(
-                    "Impossibile modificare la porta:", " Il processo di misurazione è in corso")
+                    "The COM port cannot be modified:", " The measurement process is still running ")
         # --- fine della definizione del metodo di selezione --- #
 
         portlist = list(sr_list.comports())
@@ -744,14 +746,14 @@ class App:
         serial_w.title("Serial Option")
 
         self.label1 = ttk.Label(
-            serial_w, text="Scegli la porta di comunicazione:")
+            serial_w, text="Select the COM port:")
         ft = tkFont.Font(family='Roboto', size=10)
         self.label1["font"] = ft
         self.label1.place(x=40, y=25)
 
         # dichiaro la combo box per selezionare la porta seriale
         self.comboP = TTK.Combobox(serial_w, values=portlist, state="readonly")
-        self.comboP.set("Scegli un valore")
+        self.comboP.set("Select a value")
 
         self.comboP.place(x=40, y=50, width=280, height=35)  # x=60
 
@@ -798,7 +800,7 @@ class App:
                 settingsw.destroy()
             else:
                 messagebox.showinfo(
-                    "Impossibile modificare le impostazioni:", " Il processo di misurazione è in corso")
+                    "Settings cannot be modified :", " The measurements process is still running")
         # --- fine della definizione del metodo di selezione --- #
 
         # --- definizione del metodo di controllo --- #
@@ -823,7 +825,7 @@ class App:
         settingsw.title("Settings Option")
 
         self.label1 = ttk.Label(
-            settingsw, text="Scegli l'intervallo di tempo tra due campioni:")
+            settingsw, text="Select sampling period:")
         ft = tkFont.Font(family='Roboto', size=10)
         self.label1["font"] = ft
         self.label1.place(x=40, y=30)
@@ -841,7 +843,7 @@ class App:
         self.t_Slider.place(x=40, y=50, width=250)
 
         self.label2 = ttk.Label(
-            settingsw, text="Scegli la frequenza del Notch :")
+            settingsw, text="Select a Notch frequency  :")
         ft = tkFont.Font(family='Roboto', size=10)
         self.label2["font"] = ft
         self.label2.place(x=40, y=105)
@@ -849,15 +851,15 @@ class App:
         # selezione del notch
         notch = ["50 Hz", "60 Hz"]
         self.comboN = TTK.Combobox(settingsw, values=notch, state="readonly")
-        self.comboN.set("Scegli un valore")
+        self.comboN.set("Select a value")
         self.comboN.place(x=40, y=135, width=200, height=32)
 
         # dichiaro lo slider della selezione temperatura
         self.select_tempSlider = tk.Checkbutton(
-            settingsw, text='Abilita monitoraggio della temperatura', variable=selvar, command=check)
+            settingsw, text='Eneble temperature traking', variable=selvar, command=check)
         self.select_tempSlider.place(x=40, y=185)
         self.label2 = ttk.Label(
-            settingsw, text="Scegli la temperatura da monitorare [ °C ] :")
+            settingsw, text="Select the target temperature[ °C ] :")
         ft = tkFont.Font(family='Roboto', size=10)
         self.label2["font"] = ft
         self.label2.place(x=40, y=225)
@@ -884,7 +886,7 @@ class App:
     def animate(self, k):
         if self.is_running:
             if len(temp) > 0:
-                dat = str(temp[-1])+"°"  # mostra la temperatura corrente
+                dat = str(temp[-1]) #+"°"  # mostra la temperatura corrente
                 
                 self.temp_label.config(text=dat)
 
