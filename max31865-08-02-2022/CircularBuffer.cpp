@@ -57,16 +57,14 @@ int CircularBuffer<T>::size() // necessario per spaccare il bit
     return _count;
 }
 template <typename T>
-void *CircularBuffer<T>::dump(T *toReturn )
+void *CircularBuffer<T>::dump(T *toReturn)
 {
     // return at most 64B of data (bytes/2 elements)
-    //static T toReturn[32];
     int i = 0;
     while (_count > 0)
     {
-        *(toReturn+(i++)) = pop();
+        *(toReturn + (i++)) = pop();
     }
-   // return toReturn;
 }
 //!! JUST FOR DEBUGGING PURPOSES
 /*template <typename T>
