@@ -37,6 +37,7 @@ import matplotlib.animation as an
 #from matplotlib import animation as an
 from matplotlib.pyplot import text, yticks
 
+import Kalman as klm
 
 matplotlib.use("TkAgg")
 
@@ -63,20 +64,30 @@ fault = {
     "04": "MAX31865_FAULT_OVUV 0x04",
 }
 
+kalman_specs = {
+    "P": math.sqrt((2.05*2)/12),  # covariance of the error
+    "H": 1,  # B
+    "R": 5,  # covariance of the output
+    "Q": 10,  # initial estimated covariance #!! In this case the state and the output are the same
+}
+
 t_time = []
 downstream = []
 temp = []
 delay = 1
 i_time = []
 errors = [[], []]
+kalmaned = []
 
 f = Figure(figsize=(7.5, 5), dpi=100)
 a = f.add_subplot(111)
 a.set_xlabel('Time [s]')
 a.set_ylabel('Temperature [°C]')
-starting_time=None
+starting_time = None
 
 # acquire_data è il metodo utilizzato per ricevere i dati delle misure via SPI
+
+
 def acquire_data(self):
     global starting_time
     self.s_data.port = self.port
@@ -99,24 +110,38 @@ def acquire_data(self):
 
     while self.running and self.s_data is not None and self.s_data.isOpen():
         try:
-            reading = self.s_data.read(4)  # prova a leggere 2 byte ?? Da modificare a 4 se vogliamo leggere anche i millis 
-
+            # prova a leggere 2 byte ?? Da modificare a 4 se vogliamo leggere anche i millis
+            reading = self.s_data.read(4)
+            print(reading)  # ?? Problema qui?
             if starting_time is None:
-                starting_time=datetime.now()
+                starting_time = datetime.now()
         except:
             break
-        
+
         read = reading.hex()  # converti i caratteri in valori hex
-        millis=int(read[0:4], 16)/1000
-        
+        print(read)
+        if read == '':
+            print("Empty")
+            continue  # ??? Da che cosa potrebbe essere causato?
+        millis = int(read[0:4], 16)/1000
+
         val = []
         for i in range(4, len(read), 4):
             # converti da base 16 (hex) a base 10
             val.append(int(read[i:i+4], 16))
-        print ("val: ",val) #??
+        print("val: ", val)  # ?? Problema qui?
         for rtd in val:  # per ogni valore di rtd ricevuto dalla lettura
             # converti da rtd ad un valore di temperatura
             t = round(self.rtd_to_temp(rtd), 2)
+            # !! Kalman filter implementation
+            if(len(i_time) == 0):
+                state = t
+            else:
+                state = kalmaned[-1]
+            x = klm.kalman_filter(
+                state, t, kalman_specs["P"],  kalman_specs["H"],  kalman_specs["R"],  kalman_specs["Q"])
+            kalmaned.append(x)
+
             if rtd > 0:  # se non c'è stato alcun errore
                 if len(temp) > 0:
                     # calcola la differenza di temperatura rispetto all'ultimo valore ricevuto
@@ -125,7 +150,7 @@ def acquire_data(self):
                 # inserisci la misura appena effettuata all'interno della lista di temperature
                 temp.append(t)
                 # aggiungi alla lista degli istanti di campionamento l'istante corrente
-                
+
                 if len(temp) > 1:  # se più di un campione è stato raccolto
                     # se è stata impostata una temperatura target e la temperatura corrente l'ha superata
                     if (settings["TARGETTEMP"] is not None) and (t >= settings["TARGETTEMP"]) and (temp[-2] < settings["TARGETTEMP"]):
@@ -158,7 +183,7 @@ def acquire_data(self):
                     temp.append(temp[-1])
                     errors[0].append(temp[-1])
                     errors[1].append(self.instant)
-                    self.instant = self.instant + millis 
+                    self.instant = self.instant + millis
                     i_time.append(float(self.instant))
                 # se il limite di errori consecutivi è stato raggiunto
                 if count_err == settings["ERROR"]:
@@ -608,30 +633,32 @@ class App:
         # --- definizione del metodo di salvataggio --- #
 
         def save():
-            
+
             global starting_time
 
             if len(temp) > 1:
                 self.filepath = tk.filedialog.askdirectory()
-                FilePosition = self.filepath + '/' + self.filename.get() 
+                FilePosition = self.filepath + '/' + self.filename.get()
                 with open(FilePosition, 'w', newline='', encoding='UTF8') as csv_file:
                     write = csv.writer(csv_file)
-                    write.writerow(["Timestamp","Time", "Temperature"])
+                    write.writerow(["Timestamp", "Time", "Temperature"])
 
                     for i in range(len(temp)):
-                        row = [str(starting_time+timedelta(seconds=i_time[i])),str(round (i_time[i],3)), str(temp[i])]
+                        row = [str(starting_time+timedelta(seconds=i_time[i])),
+                               str(round(i_time[i], 3)), str(temp[i])]
                         print(row)
                         write.writerow(row)
 
                 if(settings["TARGETTEMP"] is not None):
                     SidecarFilePosition = self.filepath + '/' + \
                         "TIME_INTERVAL" + self.filename.get()
-                    with open(SidecarFilePosition, 'w', newline='', encoding='UTF8') as csv_file:  
+                    with open(SidecarFilePosition, 'w', newline='', encoding='UTF8') as csv_file:
                         write = csv.writer(csv_file)
                         write.writerow(
                             ["TarghetTemperature", "Rising", "Falling", " Interval"])
                         for i in range(len(t_time)):
-                            row=[settings["TARGETTEMP"]]+[round(t,3) for t in t_time[i]]
+                            row = [settings["TARGETTEMP"]] + \
+                                [round(t, 3) for t in t_time[i]]
                             write.writerow(row)
             else:
                 messagebox.showinfo("Impossible to save data ",
@@ -699,7 +726,6 @@ class App:
 
         if self.avg is not None and self.std is not None:
 
-            
             self.avg_label.config(text=str(round(self.avg, 2))+"°C")
             self.std_label.config(text=str(round(self.std, 2))+"°C")
 
@@ -886,8 +912,8 @@ class App:
     def animate(self, k):
         if self.is_running:
             if len(temp) > 0:
-                dat = str(temp[-1]) #+"°"  # mostra la temperatura corrente
-                
+                dat = str(temp[-1])  # +"°"  # mostra la temperatura corrente
+
                 self.temp_label.config(text=dat)
 
             self.stat()
@@ -898,7 +924,9 @@ class App:
 
             if len(temp) > 0:
                 # mostra gli errori come x rosse
-                a.plot(i_time, temp, errors[1], errors[0], "rx")
+                a.plot(i_time, temp,
+                       errors[1], errors[0],
+                       "rx", i_time, kalmaned, 'g:')
                 if(settings["TARGETTEMP"]):
                     a.plot(
                         [0, i_time[-1]],
