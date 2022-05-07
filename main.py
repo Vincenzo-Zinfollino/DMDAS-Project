@@ -65,7 +65,7 @@ fault = {
 }
 
 kalman_specs = {
-    "P": math.sqrt((2.05*2)/12),  # covariance of the error
+    "P": math.sqrt(((2.05*2)**2)/12),  # covariance of the error
     "H": 1,  # B
     "R": 5,  # covariance of the output
     "Q": 10,  # initial estimated covariance #!! In this case the state and the output are the same
