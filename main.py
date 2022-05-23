@@ -1,3 +1,4 @@
+from turtle import color
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from asyncore import read
@@ -43,7 +44,7 @@ matplotlib.use("TkAgg")
 
 
 settings = {
-    "COMPORT": "COM3",
+    "COMPORT": "COM9",
     "RNOMINAL": 100,
     "BAUDRATE": 115200,
     "REFRESISTOR": 430,
@@ -52,7 +53,8 @@ settings = {
     "TIMER": 1,
     "NOTCH": 60,
     "ERROR": 5,
-    "TARGETTEMP": None
+    "TARGETTEMP": None,
+    "FILTEREDVIS": False
 }
 
 fault = {
@@ -65,10 +67,11 @@ fault = {
 }
 
 kalman_specs = {
-    "P": math.sqrt(((2.05*2)**2)/12),  # covariance of the error
-    "H": 1,  # B
-    "R": 5,  # covariance of the output
-    "Q": 10,  # initial estimated covariance #!! In this case the state and the output are the same
+    "P": 2.05/3,  # math.sqrt(((2.05*2)**2)/12),  # covariance of the error
+    "H": 1,  # C
+    "R": 180,  # covariance of the output
+    "Q": 0.25,  # initial estimated covariance #!! In this case the state and the output are the same
+    "A": 0.9796
 }
 
 t_time = []
@@ -92,6 +95,7 @@ def acquire_data(self):
     global starting_time
     self.s_data.port = self.port
     count_err = 0  # necessario per terminare automaticamente il processo di misura se ci sono tropp errori consecutivi
+    kalman_specs["R"]=1/settings["TIMER"]
 
     try:
         self.s_data.open()
@@ -112,14 +116,14 @@ def acquire_data(self):
         try:
             # prova a leggere 2 byte ?? Da modificare a 4 se vogliamo leggere anche i millis
             reading = self.s_data.read(4)
-            print(reading)  # ?? Problema qui?
+            #print(reading)  # ?? Problema qui?
             if starting_time is None:
                 starting_time = datetime.now()
         except:
             break
 
         read = reading.hex()  # converti i caratteri in valori hex
-        print(read)
+        #print(read)
         if read == '':
             print("Empty")
             continue  # ??? Da che cosa potrebbe essere causato?
@@ -129,20 +133,28 @@ def acquire_data(self):
         for i in range(4, len(read), 4):
             # converti da base 16 (hex) a base 10
             val.append(int(read[i:i+4], 16))
-        print("val: ", val)  # ?? Problema qui?
+        #print("val: ", val)  # ?? Problema qui?
         for rtd in val:  # per ogni valore di rtd ricevuto dalla lettura
             # converti da rtd ad un valore di temperatura
             t = round(self.rtd_to_temp(rtd), 2)
-            # !! Kalman filter implementation
-            if(len(i_time) == 0):
-                state = t
-            else:
-                state = kalmaned[-1]
-            x = klm.kalman_filter(
-                state, t, kalman_specs["P"],  kalman_specs["H"],  kalman_specs["R"],  kalman_specs["Q"])
-            kalmaned.append(x)
-
+        
             if rtd > 0:  # se non c'è stato alcun errore
+                # !! Kalman filter implementation
+                if(len(i_time) == 0):
+                
+                    x = klm.kalman_filter(
+                       t , t, kalman_specs["P"],  kalman_specs["H"],  kalman_specs["R"],  kalman_specs["Q"])
+                    kalmaned.append(x[0])
+                    kalman_specs["P"]=x[1]
+
+                else:
+                    #state = kalmaned[-1]
+                    x = klm.kalman_filter(
+                       (kalmaned[-1]), t, kalman_specs["P"],  kalman_specs["H"],  kalman_specs["R"],  kalman_specs["Q"])
+                    kalmaned.append(x[0])
+                    kalman_specs["P"]= x[1]
+                
+
                 if len(temp) > 0:
                     # calcola la differenza di temperatura rispetto all'ultimo valore ricevuto
                     dif = abs(t-temp[-1])
@@ -347,7 +359,7 @@ class App:
         root.title("DMDAS Project")
         # imposta la dimensione della finestra
         width = 1200
-        height = 800
+        height = 700
         screenwidth = root.winfo_screenwidth()
         screenheight = root.winfo_screenheight()
         alignstr = '%dx%d+%d+%d' % (width, height,
@@ -387,7 +399,7 @@ class App:
         self.start["justify"] = "center"
         self.start["text"] = "START"
         self.start["borderwidth"] = 0
-        self.start.place(x=50, y=715, width=140, height=50)
+        self.start.place(x=50, y=615, width=140, height=50)
         self.start["command"] = self.start_command
 
         # stop button
@@ -399,7 +411,7 @@ class App:
         self.stop["justify"] = "center"
         self.stop["text"] = "STOP"
         self.stop["borderwidth"] = 0
-        self.stop.place(x=1010, y=715, width=140, height=50)
+        self.stop.place(x=1010, y=615, width=140, height=50)
         self.stop["command"] = self.stop_command
 
         # Canvas for the graph
@@ -429,6 +441,21 @@ class App:
         self.temp_label["font"] = ft
         self.temp_label["fg"] = "#ffffff"
         self.temp_label["bg"] = "#696969"
+
+   
+            
+        self.lEst = tk.Label(root, text='Estimated Temperature [°C]:')
+        #self.lEst.place(x=110, y=288, width=270, height=20)
+        ft = tkFont.Font(family='Roboto', size=10)
+        self.lEst["font"] = ft
+        self.lEst["fg"] = "#000000"
+
+        self.temp_label_est = tk.Label(root, text='--')
+        #self.temp_label_est.place(x=135, y=315, width=220, height=80)
+        ft = tkFont.Font(family='Roboto', size=32)
+        self.temp_label_est["font"] = ft
+        self.temp_label_est["fg"] = "#ffffff"
+        self.temp_label_est["bg"] = "#696969"
 
         self.lavg = tk.Label(root, text='AVG:')
         self.lavg.place(x=113, y=200, width=130, height=20)
@@ -629,7 +656,7 @@ class App:
         filename = askopenfilename()
 
     def m_saveData(self):
-        print('Save Data')
+        #print('Save Data')
         # --- definizione del metodo di salvataggio --- #
 
         def save():
@@ -641,12 +668,12 @@ class App:
                 FilePosition = self.filepath + '/' + self.filename.get()
                 with open(FilePosition, 'w', newline='', encoding='UTF8') as csv_file:
                     write = csv.writer(csv_file)
-                    write.writerow(["Timestamp", "Time", "Temperature"])
+                    write.writerow(["Timestamp", "Time", "FilteredTemp","Temperature"])
 
                     for i in range(len(temp)):
                         row = [str(starting_time+timedelta(seconds=i_time[i])),
-                               str(round(i_time[i], 3)), str(temp[i])]
-                        print(row)
+                               str(round(i_time[i], 3)),str(round(kalmaned[i],3)), str(temp[i])]
+                        #print(row)
                         write.writerow(row)
 
                 if(settings["TARGETTEMP"] is not None):
@@ -692,7 +719,7 @@ class App:
         self.filename = tk.Entry(saveData_w, textvariable=self.s_filename)
         self.filename.insert(0, self.s_filename + '.csv')
         self.filename.place(x=30, y=50, width=250, height=20)
-        print(self.s_filename)
+        #print(self.s_filename)
 
         if ((len(t_time) > 0) and (settings["TARGETTEMP"] is not None)):
 
@@ -799,6 +826,12 @@ class App:
 
     def m_settings(self):
         selvar = tk.IntVar()
+        visFilter=tk.IntVar()
+       
+        if settings["FILTEREDVIS"] is False:
+            visFilter.set(False)
+           
+
         if settings["TARGETTEMP"] != None:
             selvar.set(1)
 
@@ -808,6 +841,14 @@ class App:
                 var = self.t_Slider.get()
                 settings["TIMER"] = var
                 settings["NOTCH"] = self.comboN.get()[0:2]
+
+                if visFilter.get() == 1:
+                    visFilter.set(1)
+                    self.filterEn.configure(state="disabled")
+                    settings["FILTEREDVIS"]=True
+                    self.lEst.place(x=110, y=288, width=270, height=20)
+                    self.temp_label_est.place(x=135, y=315, width=220, height=80)
+             
 
                 if selvar.get() == 1:
                     settings["TARGETTEMP"] = self.temp_Slider.get()
@@ -822,7 +863,7 @@ class App:
                     self.track_temp_label["bg"] = "#696969"
 
                 # cambia il colore del riquadro della temperatura monitorata
-                print(settings["TARGETTEMP"])
+                #print(settings["TARGETTEMP"])
                 settingsw.destroy()
             else:
                 messagebox.showinfo(
@@ -837,11 +878,12 @@ class App:
                 self.temp_Slider.configure(state="normal")
             else:
                 self.temp_Slider.configure(state="disabled")
+
         # --- fine della definizione del metodo di controllo --- #
         # !! TODO da inserire la condizione per impossibilitare la modifica durante la misurazione
         settingsw = ttk.Toplevel(root)
         width = 320
-        height = 425
+        height = 460
         screenwidth = settingsw.winfo_screenwidth()
         screenheight = settingsw.winfo_screenheight()
         alignstr = '%dx%d+%d+%d' % (width, height,
@@ -882,7 +924,7 @@ class App:
 
         # dichiaro lo slider della selezione temperatura
         self.select_tempSlider = tk.Checkbutton(
-            settingsw, text='Eneble temperature traking', variable=selvar, command=check)
+            settingsw, text='Enable temperature traking', variable=selvar, command=check)
         self.select_tempSlider.place(x=40, y=185)
         self.label2 = ttk.Label(
             settingsw, text="Select the target temperature[ °C ] :")
@@ -895,6 +937,11 @@ class App:
         self.temp_Slider.set(20.0)
         self.temp_Slider.place(x=40, y=250, width=250)
 
+        self.filterEn = tk.Checkbutton(
+            settingsw, text='Enable filtered data visualizzation', variable=visFilter)#, command=visfilter 
+        self.filterEn.place(x=40, y=310)
+        
+
         self.saveset_b = ttk.Button(settingsw)
 
         self.saveset_b["bg"] = "#00ac69"
@@ -906,7 +953,7 @@ class App:
         self.saveset_b["borderwidth"] = 0
         self.saveset_b["command"] = selectset
 
-        self.saveset_b.place(x=128, y=360, width=70, height=35)
+        self.saveset_b.place(x=128, y=390, width=70, height=35)
 
     # animate mostra in tempo reale i dati ricevuti dai sensori su un grafico
     def animate(self, k):
@@ -923,10 +970,23 @@ class App:
             a.set_ylabel('Temperature [°C]')
 
             if len(temp) > 0:
-                # mostra gli errori come x rosse
-                a.plot(i_time, temp,
-                       errors[1], errors[0],
-                       "rx", i_time, kalmaned, 'g:')
+                # mostra gli errori come x rosse               
+                if len(temp) == len(i_time):
+                    last_index=min(len(temp),len(i_time))
+                    a.plot(i_time[:last_index], temp[:last_index],
+                        errors[1], errors[0],
+                        "rx")
+
+                    if  settings["FILTEREDVIS"] is True:
+                        est=str(round(kalmaned[-1],3))
+                        self.temp_label_est.config(text=est)
+                        last_index_est=min(len(i_time),len(kalmaned))
+                        a.plot( i_time[:last_index_est], kalmaned[:last_index_est], ':', color='#FF7F11')
+                else:
+                    print("len temp",len(temp))
+                    print("len itime",len(i_time))
+                    print("len kalman",len(kalmaned))
+                
                 if(settings["TARGETTEMP"]):
                     a.plot(
                         [0, i_time[-1]],

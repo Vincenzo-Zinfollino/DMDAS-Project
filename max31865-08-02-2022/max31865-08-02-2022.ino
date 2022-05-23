@@ -189,7 +189,7 @@ void sendData()
     // poichè il metodo write invia un byte per volta è necessario suddividere il dato in due Byte
     Serial.write(msb);
     Serial.write(lsb);
-    if( istant==point)Serial.println("colombina di merda");
+   
   
     Serial.flush(); // Necessario per  ripulire il canale di comunnicazione
     
