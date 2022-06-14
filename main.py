@@ -589,7 +589,7 @@ class App:
             ft = tkFont.Font(family='Roboto', size=13)
             self.label1 = ttk.Label(
                 calibratew, text="Offset value :", font=ft)
-            self.label1.place(x=335, y=300)
+            self.label1.place(x=395, y=300)
 
             self.temp_label = tk.Label(
                 calibratew, text=str(round(cl.offset, 2)))
@@ -969,12 +969,12 @@ class App:
             a.set_xlabel('Time [s]')  # label sugli assi cartesiani
             a.set_ylabel('Temperature [°C]')
 
-            if len(temp) > 0:
-                # mostra gli errori come x rosse               
+            if len(temp) > 0:  
                 if len(temp) == len(i_time):
                     last_index=min(len(temp),len(i_time))
-                    a.plot(i_time[:last_index], temp[:last_index],
-                        errors[1], errors[0],
+
+                    a.plot(i_time[:last_index], temp[:last_index], # mostra i valori di temperatura misurati 
+                        errors[1], errors[0], # mostra gli errori come x rosse             
                         "rx")
 
                     if  settings["FILTEREDVIS"] is True:
