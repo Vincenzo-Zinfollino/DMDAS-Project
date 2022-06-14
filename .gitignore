@@ -1,0 +1,8 @@
+ErrorLOG.log
+dist/
+.vscode
+.idea
+test/*.py
+test/*.csv
+test/__pycache__
+__pycache__
